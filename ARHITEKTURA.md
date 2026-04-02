@@ -1,102 +1,311 @@
-# Nexus Duel - Arhitektura in Podatkovni Model
+# Nexus Duel - Simplified Architecture
 
-## 1. Projektna Struktura
+## 1. Project Structure
 
 ```
 nexus-duel/
 ├── public/
 │   ├── assets/
-│   │   ├── sprites/
-│   │   │   ├── champions/
-│   │   │   │   ├── warrior.png
-│   │   │   │   └── mage.png
-│   │   │   ├── abilities/
-│   │   │   └── effects/
-│   │   └── audio/
+│   │   ├── sprites/          # Champion and ability sprites
+│   │   └── audio/            # Sound effects
 │   └── index.html
 │
 ├── src/
 │   ├── components/
-│   │   ├── Game.jsx              # Phaser game container
-│   │   ├── Lobby.jsx             # Room selection/creation
-│   │   ├── CharSelect.jsx        # Champion picker
-│   │   ├── GameOver.jsx          # End screen
-│   │   └── UI/
-│   │       ├── HealthBar.jsx
-│   │       ├── ManaBar.jsx
-│   │       ├── AbilitySlots.jsx
-│   │       └── GameStatus.jsx
+│   │   ├── Game.jsx          # Main game component
+│   │   ├── Lobby.jsx         # Room creation/joining
+│   │   └── CharSelect.jsx    # Champion selection
 │   │
 │   ├── game/
-│   │   ├── GameScene.js          # Phaser main scene
-│   │   ├── Player.js             # Player class
-│   │   ├── Champion.js           # Champion data/stats
-│   │   ├── Ability.js            # Ability class
-│   │   └── mechanics/
-│   │       ├── collision.js
-│   │       ├── movement.js
-│   │       ├── abilities.js
-│   │       └── damage.js
+│   │   ├── GameScene.js      # Phaser game scene
+│   │   ├── Player.js         # Player class
+│   │   └── Champion.js       # Champion data
 │   │
 │   ├── network/
-│   │   ├── PeerConnection.js     # WebRTC/PeerJS setup
-│   │   ├── GameSync.js           # State synchronization
-│   │   └── Messages.js           # Message protocol
+│   │   ├── PeerConnection.js # WebRTC/PeerJS setup
+│   │   └── GameSync.js       # State synchronization
 │   │
 │   ├── utils/
-│   │   ├── constants.js
-│   │   ├── helpers.js
-│   │   └── validators.js
+│   │   └── constants.js      # Game constants
 │   │
-│   ├── App.jsx
-│   └── index.css
+│   └── App.jsx
 │
 ├── package.json
 ├── vite.config.js
 └── README.md
 ```
 
----
+## 2. Core Data Models
 
-## 2. Podatkovni Model - Game State
-
-### Root Game State
+### Game State
 ```javascript
 {
-  // Lobby/Room Info
   roomId: "ROOM_ABC123",
-  status: "waiting" | "champion_select" | "playing" | "finished",
-  createdAt: 1712054400000,
-  
-  // Players
+  status: "waiting" | "playing" | "finished",
   players: {
     player1: PlayerState,
     player2: PlayerState
   },
-  
-  // Game Progress
-  gameState: {
-    startTime: 1712054400000,
-    elapsedTime: 45000,  // ms
-    totalDuration: 300000,  // 5 minutes
-    winner: null | "player1" | "player2"
+  winner: null | "player1" | "player2"
+}
+```
+
+### Player State
+```javascript
+{
+  id: "peer_1ab2cd3ef",
+  username: "Blaz",
+  champion: "Warrior" | "Mage",
+
+  // Position & Stats
+  position: { x: 300, y: 400 },
+  health: 500,
+  mana: 200,
+
+  // Abilities
+  abilities: {
+    q: { cooldownRemaining: 0 },
+    w: { cooldownRemaining: 0 },
+    e: { cooldownRemaining: 0 },
+    r: { cooldownRemaining: 0 }
+  },
+
+  isAlive: true
+}
+```
+
+## 3. Network Architecture
+
+### P2P Flow
+```
+Player A Browser ←WebRTC→ Player B Browser
+     ↓                        ↓
+  React + Phaser        React + Phaser
+     ↓                        ↓
+  GameSync.js ←100ms→ GameSync.js
+```
+
+### Message Types
+```javascript
+// State sync every 100ms
+{ type: "state", playerId: "peer_1", position: {x,y}, health: 450 }
+
+// Ability cast
+{ type: "ability", playerId: "peer_1", abilityKey: "q", targetPos: {x,y} }
+
+// Damage dealt
+{ type: "hit", attackerId: "peer_1", targetId: "peer_2", damage: 50 }
+```
+
+## 4. Game Loop
+
+```
+1. Handle Input (WASD, Q/W/E/R)
+2. Update Local State (position, abilities)
+3. Process Abilities (cast, cooldowns, damage)
+4. Render (draw sprites, UI)
+5. Network Sync (send state every 100ms)
+```
+
+## 5. Champions
+
+### Warrior
+- **HP:** 500, **Mana:** 200, **Speed:** 250
+- **Q:** Slash (melee, 50 dmg, 1.5s cd)
+- **W:** Stun (150 range, 2.5s stun, 10s cd)
+- **E:** Shield (30% dmg reduction, 8s cd)
+- **R:** Ultimate (200 dmg AOE, 45s cd)
+
+### Mage
+- **HP:** 300, **Mana:** 400, **Speed:** 280
+- **Q:** Fireball (ranged, 80 dmg, 2s cd)
+- **W:** Mana Shield (mana armor, passive)
+- **E:** Blink (200px teleport, 12s cd)
+- **R:** Meteor (250 AOE, 200 dmg, 50s cd)
+
+## 6. Technologies
+
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| **Frontend** | React 18+ | UI components |
+| **Game Engine** | Phaser 3.55+ | 2D game rendering |
+| **Networking** | PeerJS 1.4+ | P2P WebRTC |
+| **Build Tool** | Vite 5+ | Fast development |
+| **Language** | JavaScript ES6+ | Core logic |
+
+## 7. Development Phases
+
+### Phase 1: Setup (1-2 days)
+- [ ] Create React + Vite project
+- [ ] Install Phaser 3 and PeerJS
+- [ ] Setup basic folder structure
+- [ ] Create Lobby and Game components
+
+### Phase 2: Core Game (4-5 days)
+- [ ] Implement Phaser GameScene
+- [ ] Add player movement (WASD)
+- [ ] Create champion classes
+- [ ] Implement ability system
+- [ ] Add collision detection
+
+### Phase 3: Networking (3-4 days)
+- [ ] Setup PeerJS connection
+- [ ] Implement state synchronization
+- [ ] Handle opponent state updates
+- [ ] Test P2P connection locally
+
+### Phase 4: Polish (2-3 days)
+- [ ] Add UI (health bars, abilities)
+- [ ] Add basic graphics
+- [ ] Fix bugs and improve gameplay
+- [ ] Deploy to Vercel
+
+## 8. Key Classes
+
+### GameScene.js
+```javascript
+class GameScene extends Phaser.Scene {
+  create() {
+    // Initialize game objects
+    this.player = new Player(this, localPlayerData);
+    this.opponent = new Player(this, remotePlayerData);
+  }
+
+  update(time, delta) {
+    // Handle input
+    this.handleInput();
+
+    // Update game state
+    this.updateGameState(delta);
+
+    // Network sync
+    this.syncState();
   }
 }
 ```
 
-### Player State (za svakog igrača)
+### Player.js
 ```javascript
-{
-  // Identity
-  id: "peer_1ab2cd3ef",
-  username: "Blaz",
-  
-  // Champion Info
-  champion: {
-    name: "Warrior" | "Mage",
-    level: 1,
-    experience: 0
-  },
+class Player {
+  constructor(scene, data) {
+    this.scene = scene;
+    this.data = data;
+    this.sprite = scene.add.sprite(data.position.x, data.position.y, 'champion');
+  }
+
+  move(velocity) {
+    this.sprite.x += velocity.x;
+    this.sprite.y += velocity.y;
+  }
+
+  takeDamage(amount) {
+    this.data.health -= amount;
+    if (this.data.health <= 0) {
+      this.data.isAlive = false;
+    }
+  }
+}
+```
+
+### PeerConnection.js
+```javascript
+class PeerConnection {
+  constructor() {
+    this.peer = new Peer();
+    this.connections = new Map();
+  }
+
+  createRoom() {
+    // Create new room and return room ID
+  }
+
+  joinRoom(roomId) {
+    // Join existing room
+  }
+
+  sendMessage(message) {
+    // Send to all connected peers
+  }
+
+  onMessage(callback) {
+    // Handle incoming messages
+  }
+}
+```
+
+## 9. Arena Setup
+
+```
+Arena: 1200x800 pixels
+Player 1 spawn: (150, 400)
+Player 2 spawn: (1050, 400)
+Boundaries: 50px from edges
+No obstacles (simple version)
+```
+
+## 10. Basic Implementation Steps
+
+1. **Setup Project**
+   ```bash
+   npm create vite@latest nexus-duel -- --template react
+   cd nexus-duel
+   npm install phaser peerjs
+   ```
+
+2. **Create Basic GameScene**
+   - Initialize Phaser game
+   - Add player sprites
+   - Implement WASD movement
+
+3. **Add Networking**
+   - Setup PeerJS connection
+   - Send/receive position updates
+   - Sync game state
+
+4. **Implement Abilities**
+   - Add ability buttons/keys
+   - Handle ability casting
+   - Calculate damage and effects
+
+5. **Add UI**
+   - Health/mana bars
+   - Ability cooldowns
+   - Game status
+
+## 11. File Size Estimates
+
+- **GameScene.js:** ~300 lines
+- **Player.js:** ~150 lines
+- **PeerConnection.js:** ~200 lines
+- **GameSync.js:** ~100 lines
+- **UI Components:** ~200 lines
+- **Total:** ~950 lines
+
+## 12. Performance Targets
+
+- **FPS:** 60 target, 30 minimum
+- **Network:** 100ms sync interval
+- **Bundle:** <150KB gzipped
+- **Load Time:** <2 seconds
+
+## 13. Testing Checklist
+
+- [ ] Create room and join from another browser tab
+- [ ] Test WASD movement for both players
+- [ ] Verify abilities work and deal damage
+- [ ] Check collision detection
+- [ ] Test network disconnection handling
+- [ ] Verify game ends when HP reaches 0
+
+## 14. Deployment
+
+1. Build for production: `npm run build`
+2. Deploy to Vercel (free hosting)
+3. Share the URL with friends to play
+
+---
+
+**Ready to start? Let's create the React + Vite project!**
   
   // Position & Movement
   position: {
