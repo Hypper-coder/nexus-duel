@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "nexus-duel",
   "version": "0.1.0",
   "private": true,
@@ -6,13 +6,15 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "serve:ws": "node server/wsServer.js"
   },
   "dependencies": {
     "peerjs": "^1.4.8",
     "phaser": "^3.55.2",
     "react": "^18.3.0",
-    "react-dom": "^18.3.0"
+    "react-dom": "^18.3.0",
+    "ws": "^8.13.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.0.0",

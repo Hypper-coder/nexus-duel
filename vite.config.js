@@ -9,6 +9,7 @@ export default defineConfig({
   },
   server: {
     port: 4173,
-    open: true
+    open: true,
+    usePolling: true
   }
 });

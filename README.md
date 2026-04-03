@@ -30,3 +30,12 @@ Use `npm run build` to produce a production bundle.
 - Champion data and arena constants are centralized so additional abilities or balance patches can reuse the same source.
 
 Consult `ARHITEKTURA.md` for the full specification before continuing feature work.
+
+## WebSocket signaling server
+
+- `npm run serve:ws` starts `server/wsServer.js` on `localhost:8999` (override with `WS_PORT`).
+- Clients must send `{"type":"join","roomId":"ROOM_ABC"}` and will receive `{"type":"joined",...}` with peer IDs.
+- Any other payload (`state`, `ability`, etc.) is echoed to the rest of the room with `from` plus the original `roomId`.
+- When a player leaves, the server removes them from the room and broadcasts `{"type":"peer-left","peerId":...}`.
+
+Use this server as the central signaling point before adding PeerJS/Phaser logic to exchange IDs and states.
