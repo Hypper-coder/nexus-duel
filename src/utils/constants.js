@@ -54,7 +54,12 @@ export const GAME_STATES = {
 };
 
 export function randomRoomId() {
-  return `ROOM_${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let id = "";
+  for (let i = 0; i < 3; i += 1) {
+    id += letters[Math.floor(Math.random() * letters.length)];
+  }
+  return id;
 }
 
 export function randomPlayerId() {

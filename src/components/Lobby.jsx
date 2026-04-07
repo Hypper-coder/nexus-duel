@@ -1,6 +1,6 @@
 ﻿import { useState } from "react";
 
-export default function Lobby({ onCreateRoom, onJoinRoom, statusLabel }) {
+export default function Lobby({ onCreateRoom, onJoinRoom, statusLabel, connectedPeers, roomId }) {
   const [roomInput, setRoomInput] = useState("");
 
   return (
@@ -24,6 +24,19 @@ export default function Lobby({ onCreateRoom, onJoinRoom, statusLabel }) {
           Join room
         </button>
       </div>
+      <div style={{ marginTop: "1rem" }}>
+        <strong>Room:</strong> {roomId || "None"}
+      </div>
+      {connectedPeers && connectedPeers.length > 0 && (
+        <div style={{ marginTop: "1rem" }}>
+          <strong>Connected peers:</strong>
+          <ul style={{ margin: 0, paddingLeft: "1rem" }}>
+            {connectedPeers.map((peerId) => (
+              <li key={peerId}>{peerId}</li>
+            ))}
+          </ul>
+        </div>
+      )}
     </section>
   );
 }

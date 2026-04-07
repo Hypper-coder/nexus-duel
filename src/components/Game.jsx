@@ -5,14 +5,16 @@ import PeerConnection from "../network/PeerConnection";
 import GameSync from "../network/GameSync";
 import { ARENA_SIZE } from "../utils/constants";
 
-export default function Game({ champion, roomId, playerId }) {
+export default function Game({ champion, roomId, playerId, onPeerListChange }) {
   const containerRef = useRef(null);
   const [status, setStatus] = useState("Initializing scene...");
   const [connectedPeers, setConnectedPeers] = useState([]);
   const peerConnection = useMemo(() => new PeerConnection(playerId), [playerId]);
   const gameSync = useMemo(() => new GameSync(peerConnection), [peerConnection]);
   const wsRef = useRef(null);
-  const signalingUrl = import.meta.env.VITE_WS_URL ?? "ws://localhost:8999";
+  const signalingUrl =
+    import.meta.env.VITE_WS_URL ??
+    `ws://${window.location.hostname}:${import.meta.env.VITE_WS_PORT ?? 8999}`;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -68,22 +70,22 @@ export default function Game({ champion, roomId, playerId }) {
         return;
       }
 
-      if (payload.type === "joined") {
-        setConnectedPeers(payload.peers);
-        setStatus(`Joined ${payload.roomId} (${payload.peers.length} peer(s))`);
-        payload.peers.forEach((peerId) => peerConnection.connectTo(peerId));
-      } else if (payload.type === "peer-joined") {
-        setConnectedPeers((prev) => {
-          if (prev.includes(payload.peerId)) return prev;
-          return [...prev, payload.peerId];
-        });
-        setStatus(`Peer joined: ${payload.peerId}`);
-        peerConnection.connectTo(payload.peerId);
-      } else if (payload.type === "peer-left") {
-        setConnectedPeers((prev) => prev.filter((id) => id !== payload.peerId));
-        setStatus(`Peer left: ${payload.peerId}`);
-      }
-    };
+    if (payload.type === "joined") {
+      setConnectedPeers(payload.peers);
+      setStatus(`Joined ${payload.roomId} (${payload.peers.length} peer(s))`);
+      payload.peers.forEach((peerId) => peerConnection.connectTo(peerId));
+    } else if (payload.type === "peer-joined") {
+      setConnectedPeers((prev) => {
+        if (prev.includes(payload.peerId)) return prev;
+        return [...prev, payload.peerId];
+      });
+      setStatus(`Peer joined: ${payload.peerId}`);
+      peerConnection.connectTo(payload.peerId);
+    } else if (payload.type === "peer-left") {
+      setConnectedPeers((prev) => prev.filter((id) => id !== payload.peerId));
+      setStatus(`Peer left: ${payload.peerId}`);
+    }
+  };
 
     socket.addEventListener("open", () => {
       setStatus("Connected to signaling server");
@@ -101,6 +103,12 @@ export default function Game({ champion, roomId, playerId }) {
     };
   }, [roomId, peerConnection, signalingUrl]);
 
+  useEffect(() => {
+    if (typeof onPeerListChange === "function") {
+      onPeerListChange(connectedPeers);
+    }
+  }, [connectedPeers, onPeerListChange]);
+
   return (
     <section className="panel">
       <h2>Game Room</h2>
@@ -109,6 +117,13 @@ export default function Game({ champion, roomId, playerId }) {
       <p>Player ID: {playerId}</p>
       <p>Status: {status}</p>
       <p>Connected peers: {connectedPeers.length}</p>
+      {connectedPeers.length > 0 && (
+        <ul style={{ paddingLeft: "1rem", margin: "0 0 1rem 0" }}>
+          {connectedPeers.map((peerId) => (
+            <li key={peerId}>{peerId}</li>
+          ))}
+        </ul>
+      )}
       <div ref={containerRef} className="game-canvas" />
     </section>
   );

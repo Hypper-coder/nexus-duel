@@ -16,6 +16,7 @@ export default function App() {
   const [champion, setChampion] = useState("warrior");
   const [playerId] = useState(() => randomPlayerId());
   const [statusLabel, setStatusLabel] = useState("Create or join a room to begin.");
+  const [connectedPeers, setConnectedPeers] = useState([]);
 
   const handleCreateRoom = () => {
     const nextRoom = randomRoomId();
@@ -48,6 +49,8 @@ export default function App() {
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}
           statusLabel={statusLabel}
+          connectedPeers={connectedPeers}
+          roomId={roomId}
         />
       )}
 
@@ -56,11 +59,18 @@ export default function App() {
           selectedChampion={champion}
           onSelectChampion={handleChampionSelect}
           onComplete={handleChampionConfirm}
+          connectedPeers={connectedPeers}
+          roomId={roomId}
         />
       )}
 
       {activePanel === VIEWS.GAME && (
-        <Game champion={champion} roomId={roomId} playerId={playerId} />
+        <Game
+          champion={champion}
+          roomId={roomId}
+          playerId={playerId}
+          onPeerListChange={setConnectedPeers}
+        />
       )}
     </div>
   );
