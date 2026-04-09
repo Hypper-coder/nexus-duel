@@ -10,7 +10,7 @@ export default class Player {
       this.sprite = scene.add
         .image(data.position.x, data.position.y, textureKey)
         .setOrigin(0.5)
-        .setDisplaySize(48, 48);
+        .setDisplaySize(72, 72);
     } else {
       this.sprite = scene.add
         .rectangle(data.position.x, data.position.y, 32, 32, data.tint || 0xffffff)
@@ -60,6 +60,11 @@ export default class Player {
         ability.cooldownRemaining = Math.max(0, ability.cooldownRemaining - delta);
       }
     });
+
+    const { mana, maxMana, manaRegen } = this.data.stats;
+    if (mana < maxMana) {
+      this.data.stats.mana = Math.min(maxMana, mana + manaRegen * delta);
+    }
   }
 
   useAbility(abilityKey) {
@@ -68,6 +73,15 @@ export default class Player {
     ability.cooldownRemaining = ability.cooldown;
     this.data.stats.mana = Math.max(0, this.data.stats.mana - (ability.manaCost ?? 0));
     return ability;
+  }
+
+  attackCreep(creep, abilityKey) {
+    if (!creep || !creep.isAlive) return null;
+    if (!this.canUseAbility(abilityKey)) return null;
+    const ability = this.data.abilities[abilityKey];
+    this.useAbility(abilityKey);
+    creep.takeDamage(ability.damage ?? 30);
+    return { abilityKey, damage: ability.damage ?? 30 };
   }
 
   attack(target, abilityKey) {
@@ -103,7 +117,10 @@ export default class Player {
       position: { x: this.sprite.x, y: this.sprite.y },
       health: this.data.stats.health,
       mana: this.data.stats.mana,
-      isAlive: this.data.isAlive
+      isAlive: this.data.isAlive,
+      abilities: Object.fromEntries(
+        Object.entries(this.data.abilities).map(([key, ab]) => [key, { cooldownRemaining: ab.cooldownRemaining }])
+      )
     };
   }
 }

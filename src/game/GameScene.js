@@ -7,6 +7,7 @@ import mageImg from "../assets/mage.png";
 import archerImg from "../assets/archer.png";
 import goblinImg from "../assets/goblin.png";
 import towerImg from "../assets/tower.png";
+import mapaImg from "../assets/mapa.png";
 import Creep from "./Creep";
 import Tower from "./Tower";
 
@@ -30,6 +31,7 @@ export default class GameScene extends Phaser.Scene {
     this.remoteTint = this.options.remoteTint ?? 0x0ea5e9;
     this.localSpawn = this.options.localSpawn ?? ARENA_SIZE.playerOneSpawn;
     this.remoteSpawn = this.options.remoteSpawn ?? ARENA_SIZE.playerTwoSpawn;
+    this.isHost = this.options.isHost ?? false;
   }
 
   preload() {
@@ -38,9 +40,14 @@ export default class GameScene extends Phaser.Scene {
     this.load.image("archer", archerImg);
     this.load.image("goblin", goblinImg);
     this.load.image("tower", towerImg);
+    this.load.image("mapa", mapaImg);
   }
 
   create() {
+    this.add.image(ARENA_SIZE.width / 2, ARENA_SIZE.height / 2, "mapa")
+      .setDisplaySize(ARENA_SIZE.width, ARENA_SIZE.height)
+      .setDepth(0);
+
     const championDef = CHAMPIONS[this.championKey] ?? CHAMPIONS.warrior;
 
     const playerState = buildChampionState(
@@ -71,11 +78,17 @@ export default class GameScene extends Phaser.Scene {
       this.remoteSubscription = this.gameSync.onRemoteState((payload) => this.applyRemoteState(payload));
       this.messageCleanup = this.gameSync.onMessage((payload) => this.handleNetworkMessage(payload));
 
-      this.gameSync.start(() => ({
-        roomId: this.roomId,
-        state: this.player.getState(),
-        status: GAME_STATES.playing
-      }));
+      this.gameSync.start(() => {
+        const payload = {
+          roomId: this.roomId,
+          state: this.player.getState(),
+          status: GAME_STATES.playing
+        };
+        if (this.isHost) {
+          payload.world = this.getWorldState();
+        }
+        return payload;
+      });
     }
 
     this.playerBars = this.createBars(this.player, 0x7c3aed, 0x60a5fa);
@@ -104,25 +117,50 @@ export default class GameScene extends Phaser.Scene {
     this.updateBars(this.player, this.playerBars);
     this.updateBars(this.opponent, this.opponentBars);
     this.player.tickAbilities(delta / 1000);
-    this.creeps.forEach((creep) => creep.update(delta, this.player));
-    this.localTower.update(delta, this.creeps);
-    this.remoteTower.update(delta, this.creeps);
+    if (this.isHost) {
+      this.creeps.forEach((creep) => creep.update(delta, this.player));
+      this.localTower.update(delta, this.creeps);
+      this.remoteTower.update(delta, this.creeps);
+    }
 
     if (Phaser.Input.Keyboard.JustDown(this.attackKey)) {
-      const attackResult = this.player.attack(this.opponent, "q");
-      if (attackResult && this.gameSync) {
-        this.playAttackEffect(this.opponent, attackResult.abilityKey);
-        this.gameSync.send({
-          type: "hit",
-          attackerId: this.playerId,
-          ...attackResult,
-          roomId: this.roomId,
-          timestamp: Date.now()
-        });
-        this.statusText.setText(`Room ${this.roomId} | Hit ${this.opponent.data.id} for ${attackResult.damage}`);
-        this.updateBars(this.opponent, this.opponentBars);
+      const creepTarget = this.nearestCreepInRange("q");
+      if (creepTarget) {
+        const result = this.player.attackCreep(creepTarget, "q");
+        if (result) this.playAttackEffect({ sprite: creepTarget.sprite }, result.abilityKey);
+      } else {
+        const attackResult = this.player.attack(this.opponent, "q");
+        if (attackResult && this.gameSync) {
+          this.playAttackEffect(this.opponent, attackResult.abilityKey);
+          this.gameSync.send({
+            type: "hit",
+            attackerId: this.playerId,
+            ...attackResult,
+            roomId: this.roomId,
+            timestamp: Date.now()
+          });
+          this.statusText.setText(`Room ${this.roomId} | Hit ${this.opponent.data.id} for ${attackResult.damage}`);
+          this.updateBars(this.opponent, this.opponentBars);
+        }
       }
     }
+  }
+
+  nearestCreepInRange(abilityKey) {
+    const range = this.player.data.abilities[abilityKey]?.range ?? 80;
+    let nearest = null;
+    let nearestDist = range;
+    for (const creep of this.creeps) {
+      if (!creep.isAlive) continue;
+      const dx = creep.sprite.x - this.player.sprite.x;
+      const dy = creep.sprite.y - this.player.sprite.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = creep;
+      }
+    }
+    return nearest;
   }
 
   calculateVelocity() {
@@ -191,7 +229,7 @@ export default class GameScene extends Phaser.Scene {
       this.opponentBars = this.createBars(this.opponent, 0x0ea5e9, 0x3b82f6);
     }
 
-    const { position, health, mana, isAlive } = state;
+    const { position, health, mana, isAlive, abilities } = state;
     if (position) {
       this.opponent.sprite.setPosition(position.x, position.y);
       this.opponent.data.position.x = position.x;
@@ -205,6 +243,69 @@ export default class GameScene extends Phaser.Scene {
     }
     if (typeof isAlive === "boolean") {
       this.opponent.data.isAlive = isAlive;
+    }
+    if (abilities) {
+      Object.entries(abilities).forEach(([key, { cooldownRemaining }]) => {
+        if (this.opponent.data.abilities[key]) {
+          this.opponent.data.abilities[key].cooldownRemaining = cooldownRemaining;
+        }
+      });
+    }
+    if (!this.isHost && payload.world) {
+      this.applyWorldState(payload.world);
+    }
+  }
+
+  getWorldState() {
+    return {
+      creeps: this.creeps.map((c, i) => ({
+        index: i,
+        x: c.isAlive ? c.sprite.x : 0,
+        y: c.isAlive ? c.sprite.y : 0,
+        health: c.health,
+        isAlive: c.isAlive
+      })),
+      towers: {
+        local: { health: this.localTower.health, isAlive: this.localTower.isAlive },
+        remote: { health: this.remoteTower.health, isAlive: this.remoteTower.isAlive }
+      }
+    };
+  }
+
+  applyWorldState(world) {
+    if (!world) return;
+
+    if (world.creeps && this.creeps) {
+      world.creeps.forEach(({ index, x, y, health, isAlive }) => {
+        const creep = this.creeps[index];
+        if (!creep) return;
+        if (!isAlive && creep.isAlive) {
+          creep.takeDamage(creep.health);
+        } else if (isAlive && creep.isAlive) {
+          creep.sprite.setPosition(x, y);
+          creep.healthBar.setPosition(x, y - 28);
+          creep.healthBarBg.setPosition(x, y - 28);
+          creep.health = health;
+          creep.healthBar.displayWidth = 40 * Math.max(0, health / creep.maxHealth);
+        }
+      });
+    }
+
+    if (world.towers) {
+      const syncTower = (tower, data) => {
+        if (!data || !tower) return;
+        tower.health = data.health;
+        tower.healthBar.displayWidth = 60 * Math.max(0, data.health / tower.maxHealth);
+        if (!data.isAlive && tower.isAlive) {
+          tower.isAlive = false;
+          tower.sprite.setAlpha(0.3);
+          tower.label.setText("DESTROYED");
+        }
+      };
+      // From host: "local" = host's base = guest's remoteTower
+      syncTower(this.remoteTower, world.towers.local);
+      // From host: "remote" = guest's base = guest's localTower
+      syncTower(this.localTower, world.towers.remote);
     }
   }
 

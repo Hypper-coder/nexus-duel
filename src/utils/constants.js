@@ -18,7 +18,8 @@ export const CHAMPIONS = {
       mana: 200,
       armor: 20,
       magicResist: 5,
-      movementSpeed: 250
+      movementSpeed: 250,
+      manaRegen: 8
     },
     abilities: {
       q: { name: "Slash", damage: 50, cooldown: 1.5, range: 64, manaCost: 20 },
@@ -36,7 +37,8 @@ export const CHAMPIONS = {
       mana: 300,
       armor: 10,
       magicResist: 8,
-      movementSpeed: 310
+      movementSpeed: 310,
+      manaRegen: 10
     },
     abilities: {
       q: { name: "Arrow Shot", damage: 60, cooldown: 1.0, range: 400, manaCost: 15 },
@@ -54,7 +56,8 @@ export const CHAMPIONS = {
       mana: 400,
       armor: 5,
       magicResist: 15,
-      movementSpeed: 280
+      movementSpeed: 280,
+      manaRegen: 15
     },
     abilities: {
       q: { name: "Fireball", damage: 80, cooldown: 2, range: 350, manaCost: 50 },

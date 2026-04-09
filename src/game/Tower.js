@@ -17,10 +17,10 @@ export default class Tower {
       this.sprite = scene.add
         .image(x, y, "tower")
         .setOrigin(0.5)
-        .setDisplaySize(56, 56);
+        .setDisplaySize(96, 96);
     } else {
       this.sprite = scene.add
-        .rectangle(x, y, 56, 56, tint)
+        .rectangle(x, y, 96, 96, tint)
         .setOrigin(0.5);
     }
     this.sprite.setDepth(4);

@@ -13,7 +13,8 @@ export function buildChampionState(key, playerId, position) {
       movementSpeed: definition.stats.movementSpeed
       ,
       maxHealth: definition.stats.health,
-      maxMana: definition.stats.mana
+      maxMana: definition.stats.mana,
+      manaRegen: definition.stats.manaRegen ?? 8
     },
     position: { ...position },
     abilities: Object.entries(definition.abilities).reduce((acc, [abilityKey, ability]) => {

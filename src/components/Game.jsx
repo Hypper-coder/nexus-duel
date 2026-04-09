@@ -27,8 +27,6 @@ export default function Game({ champion, roomId, playerId, connectedPeers, signa
 
     const config = {
       type: Phaser.AUTO,
-      width: ARENA_SIZE.width,
-      height: ARENA_SIZE.height,
       parent: containerRef.current,
       scene: [
         new GameScene({
@@ -36,13 +34,20 @@ export default function Game({ champion, roomId, playerId, connectedPeers, signa
           playerId,
           roomId,
           gameSync,
+          isHost,
           localTint,
           remoteTint,
           localSpawn,
           remoteSpawn
         })
       ],
-      backgroundColor: "#0f172a"
+      backgroundColor: "#0f172a",
+      scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH,
+        width: ARENA_SIZE.width,
+        height: ARENA_SIZE.height
+      }
     };
 
     const game = new Phaser.Game(config);
@@ -79,14 +84,11 @@ export default function Game({ champion, roomId, playerId, connectedPeers, signa
   }, [connectedPeers, peerConnection, isHost, peerReady]);
 
   return (
-    <section className="panel">
-      <h2>Game Room</h2>
-      <p>Room ID: {roomId || "–"}</p>
-      <p>Champion: {champion}</p>
-      <p>Player ID: {playerId}</p>
-      <p>Status: {status}</p>
-      <p>Connected peers: {connectedPeers.length}</p>
-      <div ref={containerRef} className="game-canvas" />
-    </section>
+    <div className="game-fullscreen">
+      <div ref={containerRef} className="game-fullscreen__canvas" />
+      <div className="game-fullscreen__hud">
+        {roomId} · {champion} · {status}
+      </div>
+    </div>
   );
 }
