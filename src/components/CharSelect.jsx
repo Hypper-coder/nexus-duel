@@ -5,6 +5,7 @@ export default function CharSelect({
   onSelectChampion,
   onComplete,
   connectedPeers,
+  playerId,
   roomId
 }) {
   return (
@@ -12,19 +13,18 @@ export default function CharSelect({
       <h2>Champion Selection</h2>
       <p>Pick a champion before jumping into the arena.</p>
       <div style={{ marginBottom: "1rem" }}>
-        <strong>Room:</strong> {roomId || "Unknown"} · <strong>Peers:</strong>{" "}
-        {connectedPeers.length}
+        <strong>Room:</strong> {roomId || "Unknown"} · <strong>Players:</strong>{" "}
+        {connectedPeers.length + 1}
       </div>
-      {connectedPeers.length > 0 && (
-        <div style={{ marginBottom: "1rem" }}>
-          <strong>Connected players:</strong>
-          <ul style={{ margin: 4, paddingLeft: "1rem" }}>
-            {connectedPeers.map((peerId) => (
-              <li key={peerId}>{peerId}</li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <div style={{ marginBottom: "1rem" }}>
+        <strong>In this room:</strong>
+        <ul style={{ margin: 4, paddingLeft: "1rem" }}>
+          <li>{playerId} (you)</li>
+          {connectedPeers.map((peerId) => (
+            <li key={peerId}>{peerId}</li>
+          ))}
+        </ul>
+      </div>
       <div className="champion-grid">
         {Object.values(CHAMPIONS).map((champion) => (
           <article key={champion.key} className="champion-card">

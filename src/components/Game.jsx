@@ -5,19 +5,25 @@ import PeerConnection from "../network/PeerConnection";
 import GameSync from "../network/GameSync";
 import { ARENA_SIZE } from "../utils/constants";
 
-export default function Game({ champion, roomId, playerId, onPeerListChange }) {
+export default function Game({ champion, roomId, playerId, connectedPeers, signalingStatus, isHost }) {
   const containerRef = useRef(null);
   const [status, setStatus] = useState("Initializing scene...");
-  const [connectedPeers, setConnectedPeers] = useState([]);
+  const [peerReady, setPeerReady] = useState(false);
+
+  useEffect(() => {
+    setStatus(signalingStatus);
+  }, [signalingStatus]);
+
   const peerConnection = useMemo(() => new PeerConnection(playerId), [playerId]);
   const gameSync = useMemo(() => new GameSync(peerConnection), [peerConnection]);
-  const wsRef = useRef(null);
-  const signalingUrl =
-    import.meta.env.VITE_WS_URL ??
-    `ws://${window.location.hostname}:${import.meta.env.VITE_WS_PORT ?? 8999}`;
 
   useEffect(() => {
     if (!containerRef.current) return;
+
+    const localTint = isHost ? 0x7c3aed : 0x0ea5e9;
+    const remoteTint = isHost ? 0x0ea5e9 : 0x7c3aed;
+    const localSpawn = isHost ? ARENA_SIZE.playerOneSpawn : ARENA_SIZE.playerTwoSpawn;
+    const remoteSpawn = isHost ? ARENA_SIZE.playerTwoSpawn : ARENA_SIZE.playerOneSpawn;
 
     const config = {
       type: Phaser.AUTO,
@@ -29,7 +35,11 @@ export default function Game({ champion, roomId, playerId, onPeerListChange }) {
           championKey: champion,
           playerId,
           roomId,
-          gameSync
+          gameSync,
+          localTint,
+          remoteTint,
+          localSpawn,
+          remoteSpawn
         })
       ],
       backgroundColor: "#0f172a"
@@ -37,7 +47,10 @@ export default function Game({ champion, roomId, playerId, onPeerListChange }) {
 
     const game = new Phaser.Game(config);
 
-    const removeReady = peerConnection.onReady(() => setStatus("Connected to peer network"));
+    const removeReady = peerConnection.onReady(() => {
+      setStatus("Connected to PeerJS");
+      setPeerReady(true);
+    });
     const removeError = peerConnection.onError((error) =>
       setStatus(`Peer connection error: ${error.message}`)
     );
@@ -53,61 +66,17 @@ export default function Game({ champion, roomId, playerId, onPeerListChange }) {
       gameSync.dispose();
       peerConnection.disconnect();
     };
-  }, [champion, containerRef, peerConnection, playerId, roomId, gameSync]);
+  }, [champion, containerRef, peerConnection, playerId, roomId, gameSync, isHost]);
 
+  // Only the guest initiates the WebRTC connection — if both sides call connectTo
+  // simultaneously they each store their own outgoing connection and ignore the
+  // incoming one, so no data ever flows. The host just waits for the incoming
+  // connection (handled by peer.on("connection") in PeerConnection). We also
+  // wait for peerReady so our peer is registered with PeerJS before connecting.
   useEffect(() => {
-    if (!roomId) return undefined;
-
-    const socket = new WebSocket(signalingUrl);
-    wsRef.current = socket;
-
-    const handleMessage = (event) => {
-      let payload;
-      try {
-        payload = JSON.parse(event.data);
-      } catch (error) {
-        setStatus("Signaling: invalid message");
-        return;
-      }
-
-    if (payload.type === "joined") {
-      setConnectedPeers(payload.peers);
-      setStatus(`Joined ${payload.roomId} (${payload.peers.length} peer(s))`);
-      payload.peers.forEach((peerId) => peerConnection.connectTo(peerId));
-    } else if (payload.type === "peer-joined") {
-      setConnectedPeers((prev) => {
-        if (prev.includes(payload.peerId)) return prev;
-        return [...prev, payload.peerId];
-      });
-      setStatus(`Peer joined: ${payload.peerId}`);
-      peerConnection.connectTo(payload.peerId);
-    } else if (payload.type === "peer-left") {
-      setConnectedPeers((prev) => prev.filter((id) => id !== payload.peerId));
-      setStatus(`Peer left: ${payload.peerId}`);
-    }
-  };
-
-    socket.addEventListener("open", () => {
-      setStatus("Connected to signaling server");
-      socket.send(JSON.stringify({ type: "join", roomId }));
-    });
-    socket.addEventListener("message", handleMessage);
-    socket.addEventListener("error", () => setStatus("Signaling error"));
-    socket.addEventListener("close", () => setStatus("Signaling disconnected"));
-
-    return () => {
-      socket.removeEventListener("message", handleMessage);
-      socket.close();
-      wsRef.current = null;
-      setConnectedPeers([]);
-    };
-  }, [roomId, peerConnection, signalingUrl]);
-
-  useEffect(() => {
-    if (typeof onPeerListChange === "function") {
-      onPeerListChange(connectedPeers);
-    }
-  }, [connectedPeers, onPeerListChange]);
+    if (isHost || !peerReady) return;
+    connectedPeers.forEach((peerId) => peerConnection.connectTo(peerId));
+  }, [connectedPeers, peerConnection, isHost, peerReady]);
 
   return (
     <section className="panel">
@@ -117,13 +86,6 @@ export default function Game({ champion, roomId, playerId, onPeerListChange }) {
       <p>Player ID: {playerId}</p>
       <p>Status: {status}</p>
       <p>Connected peers: {connectedPeers.length}</p>
-      {connectedPeers.length > 0 && (
-        <ul style={{ paddingLeft: "1rem", margin: "0 0 1rem 0" }}>
-          {connectedPeers.map((peerId) => (
-            <li key={peerId}>{peerId}</li>
-          ))}
-        </ul>
-      )}
       <div ref={containerRef} className="game-canvas" />
     </section>
   );

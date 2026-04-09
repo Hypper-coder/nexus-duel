@@ -27,6 +27,24 @@ export const CHAMPIONS = {
       r: { name: "Ultimate", damage: 120, cooldown: 45, aoeRadius: 200, manaCost: 150 }
     }
   },
+  archer: {
+    key: "archer",
+    name: "Archer",
+    description: "A swift ranged fighter that kites enemies from a distance.",
+    stats: {
+      health: 350,
+      mana: 300,
+      armor: 10,
+      magicResist: 8,
+      movementSpeed: 310
+    },
+    abilities: {
+      q: { name: "Arrow Shot", damage: 60, cooldown: 1.0, range: 400, manaCost: 15 },
+      w: { name: "Multi-Shot", damage: 35, cooldown: 6, range: 350, manaCost: 50 },
+      e: { name: "Roll", cooldown: 10, range: 180, manaCost: 40 },
+      r: { name: "Rain of Arrows", damage: 150, cooldown: 40, aoeRadius: 180, manaCost: 130 }
+    }
+  },
   mage: {
     key: "mage",
     name: "Mage",

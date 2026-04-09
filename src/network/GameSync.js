@@ -5,7 +5,11 @@ export default class GameSync {
     this.peerConnection = peerConnection;
     this.interval = null;
     this.remoteListeners = new Set();
-    this.messageCleanup = this.peerConnection.onMessage((payload) => this.handleIncoming(payload));
+    this.generalListeners = new Set();
+    this.messageCleanup = this.peerConnection.onMessage((payload) => {
+      this.handleIncoming(payload);
+      this.generalListeners.forEach((listener) => listener(payload));
+    });
   }
 
   handleIncoming(payload) {
@@ -18,6 +22,17 @@ export default class GameSync {
     return () => {
       this.remoteListeners.delete(callback);
     };
+  }
+
+  onMessage(callback) {
+    this.generalListeners.add(callback);
+    return () => {
+      this.generalListeners.delete(callback);
+    };
+  }
+
+  send(payload) {
+    this.peerConnection.sendMessage(payload);
   }
 
   start(stateProvider) {

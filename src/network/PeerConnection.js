@@ -2,11 +2,7 @@ import Peer from "peerjs";
 
 export default class PeerConnection {
   constructor(playerId) {
-    this.peer = new Peer(playerId, {
-      host: "peerjs-server.herokuapp.com",
-      secure: true,
-      port: 443
-    });
+    this.peer = new Peer(playerId);
     this.connections = new Map();
     this.callbacks = {
       ready: [],
@@ -18,6 +14,18 @@ export default class PeerConnection {
     this.peer.on("open", () => this.callbacks.ready.forEach((cb) => cb(this.peer.id)));
     this.peer.on("error", (error) => this.callbacks.error.forEach((cb) => cb(error)));
     this.peer.on("connection", (connection) => this.attachConnection(connection));
+    this.peer.on("disconnected", () => {
+      if (this.peer.destroyed) return;
+      this.callbacks.error.forEach((cb) =>
+        cb(new Error("PeerJS disconnected from the server, attempting reconnect"))
+      );
+      this.peer.reconnect();
+    });
+    this.peer.on("close", () => {
+      this.callbacks.error.forEach((cb) =>
+        cb(new Error("PeerJS connection closed"))
+      );
+    });
   }
 
   attachConnection(connection) {
@@ -40,6 +48,9 @@ export default class PeerConnection {
   }
 
   onReady(callback) {
+    if (this.peer.open) {
+      callback(this.peer.id);
+    }
     this.callbacks.ready.push(callback);
     return () => {
       this.callbacks.ready = this.callbacks.ready.filter((cb) => cb !== callback);
@@ -72,9 +83,19 @@ export default class PeerConnection {
     if (this.connections.has(peerId)) {
       return this.connections.get(peerId);
     }
-    const connection = this.peer.connect(peerId, { reliable: true });
-    this.attachConnection(connection);
-    return connection;
+
+    if (this.peer.disconnected) {
+      this.peer.reconnect();
+    }
+
+    try {
+      const connection = this.peer.connect(peerId, { reliable: true });
+      this.attachConnection(connection);
+      return connection;
+    } catch (error) {
+      this.callbacks.error.forEach((cb) => cb(error));
+      return null;
+    }
   }
 
   sendMessage(message) {

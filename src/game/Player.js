@@ -5,9 +5,19 @@ export default class Player {
   constructor(scene, data) {
     this.scene = scene;
     this.data = { ...data };
-    this.sprite = scene.add
-      .rectangle(data.position.x, data.position.y, 32, 32, data.tint || 0xffffff)
-      .setOrigin(0.5);
+    const textureKey = data.championKey;
+    if (textureKey && scene.textures.exists(textureKey)) {
+      this.sprite = scene.add
+        .image(data.position.x, data.position.y, textureKey)
+        .setOrigin(0.5)
+        .setDisplaySize(48, 48);
+    } else {
+      this.sprite = scene.add
+        .rectangle(data.position.x, data.position.y, 32, 32, data.tint || 0xffffff)
+        .setOrigin(0.5);
+    }
+
+    this.attackCooldown = 0;
   }
 
   move(velocity, delta) {
@@ -28,6 +38,7 @@ export default class Player {
   }
 
   takeDamage(amount) {
+    if (!this.data.isAlive) return;
     this.data.stats.health -= amount;
     if (this.data.stats.health <= 0) {
       this.data.stats.health = 0;
@@ -35,9 +46,60 @@ export default class Player {
     }
   }
 
+  canUseAbility(abilityKey) {
+    const ability = this.data.abilities[abilityKey];
+    if (!ability || this.attackCooldown > 0 || !this.data.isAlive) return false;
+    if ((ability.cooldownRemaining ?? 0) > 0) return false;
+    if ((ability.manaCost ?? 0) > this.data.stats.mana) return false;
+    return true;
+  }
+
+  tickAbilities(delta) {
+    Object.values(this.data.abilities).forEach((ability) => {
+      if (ability.cooldownRemaining > 0) {
+        ability.cooldownRemaining = Math.max(0, ability.cooldownRemaining - delta);
+      }
+    });
+  }
+
+  useAbility(abilityKey) {
+    const ability = this.data.abilities[abilityKey];
+    if (!ability) return null;
+    ability.cooldownRemaining = ability.cooldown;
+    this.data.stats.mana = Math.max(0, this.data.stats.mana - (ability.manaCost ?? 0));
+    return ability;
+  }
+
+  attack(target, abilityKey) {
+    if (!target || !target.data.isAlive) return null;
+    const ability = this.data.abilities[abilityKey];
+    if (!ability || !this.canUseAbility(abilityKey)) return null;
+
+    const distance = this.distanceTo(target);
+    const range = ability.range ?? 80;
+    if (distance > range) return null;
+
+    this.useAbility(abilityKey);
+    const damage = ability.damage ?? 30;
+    target.takeDamage(damage);
+    return {
+      damage,
+      targetId: target.data.id,
+      abilityKey
+    };
+  }
+
+  distanceTo(target) {
+    if (!target) return Infinity;
+    const dx = this.sprite.x - target.sprite.x;
+    const dy = this.sprite.y - target.sprite.y;
+    return Math.hypot(dx, dy);
+  }
+
   getState() {
     return {
       playerId: this.data.id,
+      championKey: this.data.championKey,
       position: { x: this.sprite.x, y: this.sprite.y },
       health: this.data.stats.health,
       mana: this.data.stats.mana,

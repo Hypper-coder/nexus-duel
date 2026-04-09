@@ -4,7 +4,7 @@ import { randomUUID } from "crypto";
 const PORT = process.env.WS_PORT ? Number(process.env.WS_PORT) : 8999;
 const rooms = new Map(); // roomId -> Set of sockets
 
-const wss = new WebSocketServer({ port: PORT });
+const wss = new WebSocketServer({ port: PORT, host: "0.0.0.0" });
 
 wss.on("listening", () => {
   console.log(`WebSocket server listening on ws://localhost:${PORT}`);
@@ -34,7 +34,7 @@ function handleMessage(socket, payload) {
 
   switch (type) {
     case "join":
-      joinRoom(socket, roomId);
+      joinRoom(socket, roomId, payload.peerId);
       break;
     case "leave":
       leaveRoom(socket);
@@ -44,7 +44,7 @@ function handleMessage(socket, payload) {
   }
 }
 
-function joinRoom(socket, roomId) {
+function joinRoom(socket, roomId, peerId) {
   if (!roomId) {
     socket.send(JSON.stringify({ type: "error", message: "roomId required" }));
     return;
@@ -52,17 +52,19 @@ function joinRoom(socket, roomId) {
 
   leaveRoom(socket);
 
+  if (peerId) socket.peerId = peerId;
+
   const room = rooms.get(roomId) ?? new Set();
   room.add(socket);
   rooms.set(roomId, room);
   socket.roomId = roomId;
 
   const peers = Array.from(room)
-    .map((peer) => peer.id)
-    .filter((id) => id !== socket.id);
+    .map((peer) => peer.peerId ?? peer.id)
+    .filter((id) => id !== (socket.peerId ?? socket.id));
 
-  socket.send(JSON.stringify({ type: "joined", roomId, yourId: socket.id, peers }));
-  broadcastToRoom(socket, roomId, { type: "peer-joined", peerId: socket.id });
+  socket.send(JSON.stringify({ type: "joined", roomId, yourId: socket.peerId ?? socket.id, peers }));
+  broadcastToRoom(socket, roomId, { type: "peer-joined", peerId: socket.peerId ?? socket.id });
 }
 
 function leaveRoom(socket) {
@@ -76,7 +78,7 @@ function leaveRoom(socket) {
   if (room.size === 0) {
     rooms.delete(roomId);
   } else {
-    broadcastToRoom(socket, roomId, { type: "peer-left", peerId: socket.id });
+    broadcastToRoom(socket, roomId, { type: "peer-left", peerId: socket.peerId ?? socket.id });
   }
 
   socket.roomId = null;
