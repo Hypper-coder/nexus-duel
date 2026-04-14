@@ -3,13 +3,26 @@ import Player from "./Player";
 import { ARENA_SIZE, GAME_STATES, CHAMPIONS } from "../utils/constants";
 import { buildChampionState } from "./Champion";
 import warriorImg from "../assets/warrior.png";
-import mageImg from "../assets/mage.png";
-import archerImg from "../assets/archer.png";
+import fateCasterImg from "../assets/fate caster.png";
+import fateCasterAttackImg from "../assets/fate caster attack.png";
+import fateArcherImg from "../assets/fate archer.png";
+import fateArcherAttackImg from "../assets/fate archer attack.png";
+import saberImg from "../assets/saber.png";
+import saberAttackImg from "../assets/saber attack.png";
 import goblinImg from "../assets/goblin.png";
-import towerImg from "../assets/tower.png";
+import grailImg from "../assets/grail.png";
+import grailAttackImg from "../assets/grail attack.png";
+import rockImg from "../assets/rock.png";
+import gemstoneImg from "../assets/gemstone.png";
 import mapaImg from "../assets/mapa.png";
+import twitchImg from "../assets/twitch.png";
+import casterMiniImg from "../assets/caster mini.png";
 import Creep from "./Creep";
 import Tower from "./Tower";
+import Rock from "./Rock";
+import Gemstone from "./Gemstone";
+import Twitch from "./Twitch";
+import CasterMinion from "./CasterMinion";
 
 const MOVE_SPEED = 250;
 
@@ -32,15 +45,27 @@ export default class GameScene extends Phaser.Scene {
     this.localSpawn = this.options.localSpawn ?? ARENA_SIZE.playerOneSpawn;
     this.remoteSpawn = this.options.remoteSpawn ?? ARENA_SIZE.playerTwoSpawn;
     this.isHost = this.options.isHost ?? false;
+    this.gameOverFired = false;
+    this.localKills = 0;
+    this.lastOpponentKills = 0;
   }
 
   preload() {
     this.load.image("warrior", warriorImg);
-    this.load.image("mage", mageImg);
-    this.load.image("archer", archerImg);
+    this.load.image("mage", fateCasterImg);
+    this.load.image("mage attack", fateCasterAttackImg);
+    this.load.image("archer", fateArcherImg);
+    this.load.image("archer attack", fateArcherAttackImg);
+    this.load.image("saber", saberImg);
     this.load.image("goblin", goblinImg);
-    this.load.image("tower", towerImg);
     this.load.image("mapa", mapaImg);
+    this.load.image("rock", rockImg);
+    this.load.image("gemstone", gemstoneImg);
+    this.load.image("twitch", twitchImg);
+    this.load.image("caster mini", casterMiniImg);
+    this.load.image("saber attack", saberAttackImg);
+    this.load.image("grail", grailImg);
+    this.load.image("grail attack", grailAttackImg);
   }
 
   create() {
@@ -81,7 +106,7 @@ export default class GameScene extends Phaser.Scene {
       this.gameSync.start(() => {
         const payload = {
           roomId: this.roomId,
-          state: this.player.getState(),
+          state: { ...this.player.getState(), kills: this.localKills },
           status: GAME_STATES.playing
         };
         if (this.isHost) {
@@ -94,40 +119,164 @@ export default class GameScene extends Phaser.Scene {
     this.playerBars = this.createBars(this.player, 0x7c3aed, 0x60a5fa);
     this.opponentBars = this.createBars(this.opponent, 0x0ea5e9, 0x3b82f6);
 
+    this.rocks = this.placeRocks();
+    const spawnGemstone = () => new Gemstone(this, () => this.getRandomGemPosition());
+    this.gemstones = [spawnGemstone(), spawnGemstone()];
     this.creeps = this.spawnCreeps(4);
+    this.twitches = this.spawnTwitches(2);
+    this.casterMinions = [];
+
+    if (this.isHost) {
+      this.time.addEvent({
+        delay: 15000,
+        loop: true,
+        callback: () => {
+          const newCreeps = this.spawnCreeps(2);
+          this.creeps.push(...newCreeps);
+        }
+      });
+      this.time.addEvent({
+        delay: 20000,
+        loop: true,
+        callback: () => {
+          // Spawn one caster minion per tower targeting the opposing player
+          this.casterMinions.push(new CasterMinion(this, this.localSpawn.x, this.localSpawn.y, this.opponent, 0x7c3aed, "local"));
+          this.casterMinions.push(new CasterMinion(this, this.remoteSpawn.x, this.remoteSpawn.y, this.player, 0x0ea5e9, "remote"));
+        }
+      });
+    }
 
     this.localTower = new Tower(this, this.localSpawn.x, this.localSpawn.y - 80, 0x7c3aed);
     this.remoteTower = new Tower(this, this.remoteSpawn.x, this.remoteSpawn.y - 80, 0x0ea5e9);
   }
 
+  placeRocks() {
+    const positions = [
+      { x: 300, y: 200 }, { x: 900, y: 200 },
+      { x: 300, y: 600 }, { x: 900, y: 600 },
+      { x: 600, y: 300 }, { x: 600, y: 500 },
+      { x: 450, y: 400 }, { x: 750, y: 400 }
+    ];
+    return positions.map(({ x, y }) => new Rock(this, x, y));
+  }
+
+  spawnTwitches(count) {
+    const twitches = [];
+    const cx = ARENA_SIZE.width / 2;
+    const cy = ARENA_SIZE.height / 2;
+    const offsets = [{ x: -150, y: -100 }, { x: 150, y: 100 }, { x: -150, y: 100 }, { x: 150, y: -100 }];
+    for (let i = 0; i < count; i++) {
+      const off = offsets[i % offsets.length];
+      twitches.push(new Twitch(this, cx + off.x, cy + off.y));
+    }
+    return twitches;
+  }
+
   spawnCreeps(count) {
     const creeps = [];
-    const margin = ARENA_SIZE.padding + 60;
+    const p = ARENA_SIZE.padding;
+    const W = ARENA_SIZE.width;
+    const H = ARENA_SIZE.height;
+
     for (let i = 0; i < count; i++) {
-      const x = Phaser.Math.Between(margin, ARENA_SIZE.width - margin);
-      const y = Phaser.Math.Between(margin, ARENA_SIZE.height - margin);
+      let x, y;
+      const edge = Phaser.Math.Between(0, 3);
+      if (edge === 0) { x = Phaser.Math.Between(p, W - p); y = p; }
+      else if (edge === 1) { x = Phaser.Math.Between(p, W - p); y = H - p; }
+      else if (edge === 2) { x = p; y = Phaser.Math.Between(p, H - p); }
+      else { x = W - p; y = Phaser.Math.Between(p, H - p); }
       creeps.push(new Creep(this, x, y));
     }
     return creeps;
   }
 
+  getRandomGemPosition() {
+    const margin = ARENA_SIZE.padding + 80;
+    const minX = margin;
+    const maxX = ARENA_SIZE.width - margin;
+    const minY = margin;
+    const maxY = ARENA_SIZE.height - margin;
+
+    return {
+      x: Phaser.Math.Between(minX, maxX),
+      y: Phaser.Math.Between(minY, maxY)
+    };
+  }
+
   update(_time, delta) {
     const velocity = this.calculateVelocity();
-    this.player.move(velocity, delta / 1000);
+    this.player.move(velocity, delta / 1000, this.rocks);
     this.updateBars(this.player, this.playerBars);
     this.updateBars(this.opponent, this.opponentBars);
     this.player.tickAbilities(delta / 1000);
     if (this.isHost) {
-      this.creeps.forEach((creep) => creep.update(delta, this.player));
-      this.localTower.update(delta, this.creeps);
-      this.remoteTower.update(delta, this.creeps);
+      this.gemstones.forEach((gem) => {
+        if (gem.checkPickup(this.player)) {
+          const s = this.player.data.stats;
+          s.health = Math.min(s.maxHealth, s.health + s.maxHealth * 0.5);
+          s.mana = Math.min(s.maxMana, s.mana + s.maxMana * 0.5);
+          return;
+        }
+        if (gem.checkPickup(this.opponent) && this.gameSync) {
+          this.gameSync.send({ type: "gem-heal", roomId: this.roomId });
+        }
+      });
+      this.creeps.forEach((creep) => creep.update(delta, [this.player, this.opponent]));
+      this.twitches.forEach((t) => t.update(delta, [this.player, this.opponent]));
+      this.casterMinions.forEach((m) => m.update(delta));
+
+      // Track opponent health before tower ticks so we can detect tower damage
+      const opponentHealthBefore = this.opponent.data.stats.health;
+      const localFired = this.localTower.update(delta, this.creeps, this.opponent);
+      const remoteFired = this.remoteTower.update(delta, this.creeps, this.player);
+      if (this.gameSync) {
+        if (localFired) this.gameSync.send({ type: "tower-attack", tower: "local", roomId: this.roomId });
+        if (remoteFired) this.gameSync.send({ type: "tower-attack", tower: "remote", roomId: this.roomId });
+      }
+      const opponentHealthAfter = this.opponent.data.stats.health;
+      if (opponentHealthAfter < opponentHealthBefore && this.gameSync && this.opponent.data.id !== "peer_remote") {
+        this.gameSync.send({
+          type: "hit",
+          attackerId: "tower",
+          targetId: this.opponent.data.id,
+          damage: opponentHealthBefore - opponentHealthAfter,
+          abilityKey: "tower",
+          roomId: this.roomId,
+          timestamp: Date.now()
+        });
+      }
     }
+
+    this.checkGameOver();
 
     if (Phaser.Input.Keyboard.JustDown(this.attackKey)) {
       const creepTarget = this.nearestCreepInRange("q");
       if (creepTarget) {
         const result = this.player.attackCreep(creepTarget, "q");
-        if (result) this.playAttackEffect({ sprite: creepTarget.sprite }, result.abilityKey);
+        if (result) {
+          this.playAttackEffect({ sprite: creepTarget.sprite }, result.abilityKey);
+          if (!this.isHost && this.gameSync) {
+            const creepType = this.twitches.includes(creepTarget) ? "twitch"
+              : this.casterMinions.includes(creepTarget) ? "caster"
+              : "creep";
+            const idx = creepType === "twitch" ? this.twitches.indexOf(creepTarget)
+              : creepType === "caster" ? this.casterMinions.indexOf(creepTarget)
+              : this.creeps.indexOf(creepTarget);
+            this.gameSync.send({
+              type: "creep-hit",
+              creepType,
+              index: idx,
+              damage: result.damage,
+              roomId: this.roomId
+            });
+          }
+          if (!creepTarget.isAlive) {
+            const isElite = this.twitches.includes(creepTarget) || this.casterMinions.includes(creepTarget);
+            const pts = isElite ? 2 : 1;
+            this.localKills += pts;
+            if (this.options.onScoreUpdate) this.options.onScoreUpdate({ local: pts, opponent: 0 });
+          }
+        }
       } else {
         const attackResult = this.player.attack(this.opponent, "q");
         if (attackResult && this.gameSync) {
@@ -139,6 +288,10 @@ export default class GameScene extends Phaser.Scene {
             roomId: this.roomId,
             timestamp: Date.now()
           });
+          if (!this.opponent.data.isAlive) {
+            this.localKills += 3;
+            if (this.options.onScoreUpdate) this.options.onScoreUpdate({ local: 3, opponent: 0 });
+          }
           this.statusText.setText(`Room ${this.roomId} | Hit ${this.opponent.data.id} for ${attackResult.damage}`);
           this.updateBars(this.opponent, this.opponentBars);
         }
@@ -150,14 +303,17 @@ export default class GameScene extends Phaser.Scene {
     const range = this.player.data.abilities[abilityKey]?.range ?? 80;
     let nearest = null;
     let nearestDist = range;
-    for (const creep of this.creeps) {
-      if (!creep.isAlive) continue;
-      const dx = creep.sprite.x - this.player.sprite.x;
-      const dy = creep.sprite.y - this.player.sprite.y;
+    const myOwner = this.isHost ? "local" : "remote";
+    const enemyMinions = this.casterMinions.filter(m => m.owner !== myOwner);
+    const targets = [...this.creeps, ...this.twitches, ...enemyMinions];
+    for (const t of targets) {
+      if (!t.isAlive) continue;
+      const dx = t.sprite.x - this.player.sprite.x;
+      const dy = t.sprite.y - this.player.sprite.y;
       const dist = Math.hypot(dx, dy);
       if (dist < nearestDist) {
         nearestDist = dist;
-        nearest = creep;
+        nearest = t;
       }
     }
     return nearest;
@@ -254,6 +410,13 @@ export default class GameScene extends Phaser.Scene {
     if (!this.isHost && payload.world) {
       this.applyWorldState(payload.world);
     }
+
+    // Sync opponent score in real time from their broadcasted kills field
+    if (typeof state.kills === "number" && state.kills > this.lastOpponentKills) {
+      const delta = state.kills - this.lastOpponentKills;
+      this.lastOpponentKills = state.kills;
+      if (this.options.onScoreUpdate) this.options.onScoreUpdate({ local: 0, opponent: delta });
+    }
   }
 
   getWorldState() {
@@ -265,10 +428,31 @@ export default class GameScene extends Phaser.Scene {
         health: c.health,
         isAlive: c.isAlive
       })),
+      twitches: this.twitches.map((t, i) => ({
+        index: i,
+        x: t.isAlive ? t.sprite.x : 0,
+        y: t.isAlive ? t.sprite.y : 0,
+        health: t.health,
+        isAlive: t.isAlive
+      })),
+      casterMinions: this.casterMinions.map((m, i) => ({
+        index: i,
+        x: m.isAlive ? m.sprite.x : 0,
+        y: m.isAlive ? m.sprite.y : 0,
+        health: m.health,
+        isAlive: m.isAlive,
+        owner: m.owner
+      })),
       towers: {
         local: { health: this.localTower.health, isAlive: this.localTower.isAlive },
         remote: { health: this.remoteTower.health, isAlive: this.remoteTower.isAlive }
-      }
+      },
+      gemstones: this.gemstones.map((g, i) => ({
+        index: i,
+        active: g.active,
+        x: g.x,
+        y: g.y
+      }))
     };
   }
 
@@ -277,8 +461,12 @@ export default class GameScene extends Phaser.Scene {
 
     if (world.creeps && this.creeps) {
       world.creeps.forEach(({ index, x, y, health, isAlive }) => {
+        if (!this.creeps[index]) {
+          // Host spawned a new creep — create it on guest too
+          if (isAlive) this.creeps[index] = new Creep(this, x, y);
+          return;
+        }
         const creep = this.creeps[index];
-        if (!creep) return;
         if (!isAlive && creep.isAlive) {
           creep.takeDamage(creep.health);
         } else if (isAlive && creep.isAlive) {
@@ -288,6 +476,55 @@ export default class GameScene extends Phaser.Scene {
           creep.health = health;
           creep.healthBar.displayWidth = 40 * Math.max(0, health / creep.maxHealth);
         }
+      });
+    }
+
+    if (world.twitches && this.twitches) {
+      world.twitches.forEach(({ index, x, y, health, isAlive }) => {
+        const t = this.twitches[index];
+        if (!t) return;
+        if (!isAlive && t.isAlive) {
+          t.takeDamage(t.health);
+        } else if (isAlive && t.isAlive) {
+          t.sprite.setPosition(x, y);
+          t.healthBar.x = x; t.healthBar.y = y - 32;
+          t.healthBarBg.x = x; t.healthBarBg.y = y - 32;
+          t.health = health;
+          t.healthBar.displayWidth = 44 * Math.max(0, health / t.maxHealth);
+        }
+      });
+    }
+
+    if (world.casterMinions) {
+      world.casterMinions.forEach(({ index, x, y, health, isAlive, owner }) => {
+        if (!this.casterMinions[index]) {
+          if (isAlive) {
+            const isMyMinion = this.isHost ? owner === "local" : owner === "remote";
+            const tint = isMyMinion ? 0x7c3aed : 0x0ea5e9;
+            this.casterMinions[index] = new CasterMinion(this, x, y, null, tint, owner);
+          }
+          return;
+        }
+        const m = this.casterMinions[index];
+        if (!isAlive && m.isAlive) {
+          m.takeDamage(m.health);
+        } else if (isAlive && m.isAlive) {
+          m.sprite.setPosition(x, y);
+          m.healthBar.x = x; m.healthBar.y = y - 28;
+          m.healthBarBg.x = x; m.healthBarBg.y = y - 28;
+          m.health = health;
+          m.healthBar.displayWidth = 40 * Math.max(0, health / m.maxHealth);
+        }
+      });
+    }
+
+    if (world.gemstones && this.gemstones) {
+      world.gemstones.forEach(({ index, active, x, y }) => {
+        if (!this.gemstones[index]) {
+          if (active) this.gemstones[index] = new Gemstone(this, null);
+          return;
+        }
+        this.gemstones[index].syncState(active, x, y);
       });
     }
 
@@ -310,14 +547,68 @@ export default class GameScene extends Phaser.Scene {
   }
 
   handleNetworkMessage(payload) {
-    if (!payload || payload.type !== "hit") return;
+    if (!payload) return;
+    if (payload.type === "game-over" && !this.isHost) {
+      if (this.gameOverFired) return;
+      this.gameOverFired = true;
+      // Flip result: host's victory = guest's defeat and vice versa
+      const flip = { victory: "defeat", defeat: "victory", draw: "draw" };
+      if (this.options.onGameOver) this.options.onGameOver(flip[payload.result] ?? "draw");
+      return;
+    }
+    if (payload.type === "tower-attack") {
+      // Guest mirrors the attack animation
+      const tower = payload.tower === "local" ? this.remoteTower : this.localTower;
+      tower._flashAttackSprite();
+      return;
+    }
+    if (payload.type === "gem-heal") {
+      const s = this.player.data.stats;
+      s.health = Math.min(s.maxHealth, s.health + s.maxHealth * 0.5);
+      s.mana = Math.min(s.maxMana, s.mana + s.maxMana * 0.5);
+      return;
+    }
+    if (payload.type === "creep-hit" && this.isHost) {
+      const { creepType, index, damage } = payload;
+      const target = creepType === "twitch" ? this.twitches[index]
+        : creepType === "caster" ? this.casterMinions[index]
+        : this.creeps[index];
+      if (target?.isAlive) target.takeDamage(damage);
+      return;
+    }
+    if (payload.type !== "hit") return;
+    if (payload.attackerId !== "tower") {
+      this.opponent._flashAttackSprite();
+    }
     if (payload.targetId === this.playerId) {
       this.player.takeDamage(payload.damage);
       this.statusText.setText(
         `Room ${this.roomId} | Hit by ${payload.attackerId} for ${payload.damage}`
       );
-      this.playAttackEffect(this.player, payload.abilityKey);
+      if (payload.abilityKey !== "tower") this.playAttackEffect(this.player, payload.abilityKey);
       this.updateBars(this.player, this.playerBars);
+    }
+  }
+
+  checkGameOver() {
+    if (this.gameOverFired) return;
+    if (!this.isHost) return; // guest waits for game-over message from host
+
+    const localDead = !this.player.data.isAlive;
+    const opponentDead = !this.opponent.data.isAlive;
+    if (!localDead && !opponentDead) return;
+
+    this.gameOverFired = true;
+    // result is from host's perspective — winner is whoever has more points
+    const result = this.localKills > this.lastOpponentKills ? "victory"
+      : this.localKills < this.lastOpponentKills ? "defeat"
+      : "draw";
+
+    if (this.gameSync) {
+      this.gameSync.send({ type: "game-over", result, roomId: this.roomId });
+    }
+    if (this.options.onGameOver) {
+      this.options.onGameOver(result);
     }
   }
 

@@ -1,49 +1,48 @@
 import { SYNC_INTERVAL_MS } from "../utils/constants";
 
 export default class GameSync {
-  constructor(peerConnection) {
-    this.peerConnection = peerConnection;
+  constructor(wsSend) {
+    this.wsSend = wsSend;
     this.interval = null;
+    this.stateProvider = null;
     this.remoteListeners = new Set();
     this.generalListeners = new Set();
-    this.messageCleanup = this.peerConnection.onMessage((payload) => {
-      this.handleIncoming(payload);
-      this.generalListeners.forEach((listener) => listener(payload));
-    });
   }
 
-  handleIncoming(payload) {
-    if (!payload || payload.type !== "state") return;
-    this.remoteListeners.forEach((callback) => callback(payload));
+  // Called by App.jsx whenever a WS message arrives
+  onIncoming(payload) {
+    if (!payload) return;
+    if (payload.type === "state") {
+      this.remoteListeners.forEach((cb) => cb(payload));
+    }
+    this.generalListeners.forEach((cb) => cb(payload));
   }
 
   onRemoteState(callback) {
     this.remoteListeners.add(callback);
-    return () => {
-      this.remoteListeners.delete(callback);
-    };
+    return () => this.remoteListeners.delete(callback);
   }
 
   onMessage(callback) {
     this.generalListeners.add(callback);
-    return () => {
-      this.generalListeners.delete(callback);
-    };
+    return () => this.generalListeners.delete(callback);
   }
 
   send(payload) {
-    this.peerConnection.sendMessage(payload);
+    this.wsSend(payload);
   }
 
   start(stateProvider) {
     if (this.interval) return;
+    this.stateProvider = stateProvider;
     this.interval = setInterval(() => {
+      if (!this.stateProvider) return;
       const payload = {
         type: "state",
         timestamp: Date.now(),
-        ...stateProvider()
+        ...this.stateProvider()
       };
-      this.peerConnection.sendMessage(payload);
+      this.wsSend(payload);
     }, SYNC_INTERVAL_MS);
   }
 
@@ -52,13 +51,12 @@ export default class GameSync {
       clearInterval(this.interval);
       this.interval = null;
     }
+    this.stateProvider = null;
   }
 
   dispose() {
     this.stop();
-    if (this.messageCleanup) {
-      this.messageCleanup();
-      this.messageCleanup = null;
-    }
+    this.remoteListeners.clear();
+    this.generalListeners.clear();
   }
 }

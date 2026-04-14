@@ -20,21 +20,35 @@ export default class Player {
     this.attackCooldown = 0;
   }
 
-  move(velocity, delta) {
+  move(velocity, delta, rocks = []) {
     if (!this.data.isAlive) return;
-    const nextX = Phaser.Math.Clamp(
+    let x = Phaser.Math.Clamp(
       this.sprite.x + velocity.x * delta,
       ARENA_SIZE.padding,
       ARENA_SIZE.width - ARENA_SIZE.padding
     );
-    const nextY = Phaser.Math.Clamp(
+    let y = Phaser.Math.Clamp(
       this.sprite.y + velocity.y * delta,
       ARENA_SIZE.padding,
       ARENA_SIZE.height - ARENA_SIZE.padding
     );
-    this.sprite.setPosition(nextX, nextY);
-    this.data.position.x = nextX;
-    this.data.position.y = nextY;
+
+    const playerRadius = 16;
+    for (const rock of rocks) {
+      const dx = x - rock.x;
+      const dy = y - rock.y;
+      const dist = Math.hypot(dx, dy);
+      const minDist = playerRadius + rock.radius;
+      if (dist < minDist && dist > 0) {
+        const push = (minDist - dist) / dist;
+        x += dx * push;
+        y += dy * push;
+      }
+    }
+
+    this.sprite.setPosition(x, y);
+    this.data.position.x = x;
+    this.data.position.y = y;
   }
 
   takeDamage(amount) {
@@ -75,12 +89,23 @@ export default class Player {
     return ability;
   }
 
+  _flashAttackSprite() {
+    const key = this.data.championKey;
+    const attackKey = `${key} attack`;
+    if (!this.scene.textures.exists(attackKey)) return;
+    this.sprite.setTexture(attackKey);
+    this.scene.time.delayedCall(300, () => {
+      if (this.sprite?.active) this.sprite.setTexture(key);
+    });
+  }
+
   attackCreep(creep, abilityKey) {
     if (!creep || !creep.isAlive) return null;
     if (!this.canUseAbility(abilityKey)) return null;
     const ability = this.data.abilities[abilityKey];
     this.useAbility(abilityKey);
     creep.takeDamage(ability.damage ?? 30);
+    this._flashAttackSprite();
     return { abilityKey, damage: ability.damage ?? 30 };
   }
 
@@ -96,6 +121,7 @@ export default class Player {
     this.useAbility(abilityKey);
     const damage = ability.damage ?? 30;
     target.takeDamage(damage);
+    this._flashAttackSprite();
     return {
       damage,
       targetId: target.data.id,

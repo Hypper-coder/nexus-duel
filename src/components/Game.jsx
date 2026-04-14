@@ -1,21 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Phaser from "phaser";
 import GameScene from "../game/GameScene";
-import PeerConnection from "../network/PeerConnection";
 import GameSync from "../network/GameSync";
 import { ARENA_SIZE } from "../utils/constants";
 
-export default function Game({ champion, roomId, playerId, connectedPeers, signalingStatus, isHost }) {
+export default function Game({ champion, roomId, playerId, signalingStatus, isHost, wsSend, onRegisterGameHandler, score, onScoreUpdate, onReturnToLobby, onRematch }) {
   const containerRef = useRef(null);
   const [status, setStatus] = useState("Initializing scene...");
-  const [peerReady, setPeerReady] = useState(false);
+  const [gameOver, setGameOver] = useState(null); // "victory" | "defeat" | "draw"
+  const [rematchRequested, setRematchRequested] = useState(false);
 
   useEffect(() => {
     setStatus(signalingStatus);
   }, [signalingStatus]);
 
-  const peerConnection = useMemo(() => new PeerConnection(playerId), [playerId]);
-  const gameSync = useMemo(() => new GameSync(peerConnection), [peerConnection]);
+  // GameSync uses the WebSocket channel — no WebRTC needed
+  const gameSync = useMemo(() => new GameSync(wsSend), [wsSend]);
+
+  // Register this game's incoming message handler with App so WS messages reach the scene
+  useEffect(() => {
+    onRegisterGameHandler((payload) => gameSync.onIncoming(payload));
+    return () => onRegisterGameHandler(null);
+  }, [gameSync, onRegisterGameHandler]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -38,10 +44,13 @@ export default function Game({ champion, roomId, playerId, connectedPeers, signa
           localTint,
           remoteTint,
           localSpawn,
-          remoteSpawn
+          remoteSpawn,
+          onGameOver: (result) => setGameOver(result),
+          onScoreUpdate
         })
       ],
       backgroundColor: "#0f172a",
+      audio: { noAudio: true },
       scale: {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH,
@@ -52,36 +61,18 @@ export default function Game({ champion, roomId, playerId, connectedPeers, signa
 
     const game = new Phaser.Game(config);
 
-    const removeReady = peerConnection.onReady(() => {
-      setStatus("Connected to PeerJS");
-      setPeerReady(true);
-    });
-    const removeError = peerConnection.onError((error) =>
-      setStatus(`Peer connection error: ${error.message}`)
-    );
-    const removeConnected = peerConnection.onConnected((peerId) =>
-      setStatus(`Peer connected: ${peerId}`)
-    );
-
     return () => {
-      removeReady();
-      removeError();
-      removeConnected();
       game.destroy(true);
       gameSync.dispose();
-      peerConnection.disconnect();
     };
-  }, [champion, containerRef, peerConnection, playerId, roomId, gameSync, isHost]);
+  }, [champion, containerRef, playerId, roomId, gameSync, isHost]);
 
-  // Only the guest initiates the WebRTC connection — if both sides call connectTo
-  // simultaneously they each store their own outgoing connection and ignore the
-  // incoming one, so no data ever flows. The host just waits for the incoming
-  // connection (handled by peer.on("connection") in PeerConnection). We also
-  // wait for peerReady so our peer is registered with PeerJS before connecting.
-  useEffect(() => {
-    if (isHost || !peerReady) return;
-    connectedPeers.forEach((peerId) => peerConnection.connectTo(peerId));
-  }, [connectedPeers, peerConnection, isHost, peerReady]);
+  const handleRematchClick = () => {
+    setRematchRequested(true);
+    onRematch?.();
+  };
+
+  const overlayLabel = gameOver === "victory" ? "Victory!" : gameOver === "defeat" ? "Defeat" : "Draw";
 
   return (
     <div className="game-fullscreen">
@@ -89,6 +80,44 @@ export default function Game({ champion, roomId, playerId, connectedPeers, signa
       <div className="game-fullscreen__hud">
         {roomId} · {champion} · {status}
       </div>
+      <div className="game-scoreboard-hud">
+        <span className="game-scoreboard-hud__entry game-scoreboard-hud__entry--you">You  {score.local}</span>
+        <span className="game-scoreboard-hud__divider">–</span>
+        <span className="game-scoreboard-hud__entry game-scoreboard-hud__entry--opp">{score.opponent}  Opp</span>
+      </div>
+      {gameOver && (
+        <div className="game-over-overlay">
+          <div className="game-over-panel">
+            <h1 className={`game-over-title game-over-title--${gameOver}`}>{overlayLabel}</h1>
+            <table className="scoreboard">
+              <thead>
+                <tr>
+                  <th>Player</th>
+                  <th>Score</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>You</td>
+                  <td>{score.local}</td>
+                </tr>
+                <tr>
+                  <td>Opponent</td>
+                  <td>{score.opponent}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div className="game-over-actions">
+              <button type="button" onClick={handleRematchClick} disabled={rematchRequested}>
+                {rematchRequested ? "Waiting for opponent…" : "Rematch"}
+              </button>
+              <button type="button" onClick={onReturnToLobby}>
+                Back to lobby
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

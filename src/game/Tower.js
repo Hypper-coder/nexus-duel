@@ -1,4 +1,4 @@
-const ATTACK_RANGE = 220;
+const ATTACK_RANGE = 200;
 const ATTACK_DAMAGE = 40;
 const ATTACK_COOLDOWN = 1.2;
 
@@ -13,9 +13,9 @@ export default class Tower {
     this.tint = tint;
     this.attackCooldown = 0;
 
-    if (scene.textures.exists("tower")) {
+    if (scene.textures.exists("grail")) {
       this.sprite = scene.add
-        .image(x, y, "tower")
+        .image(x, y, "grail")
         .setOrigin(0.5)
         .setDisplaySize(96, 96);
     } else {
@@ -34,7 +34,7 @@ export default class Tower {
       .setDepth(21);
   }
 
-  update(delta, creeps) {
+  update(delta, creeps, enemyPlayer) {
     if (!this.isAlive) return;
 
     const sec = delta / 1000;
@@ -43,15 +43,18 @@ export default class Tower {
       return;
     }
 
-    const target = this._nearestCreep(creeps);
-    if (!target) return;
+    const target = this._pickTarget(creeps, enemyPlayer);
+    if (!target) return false;
 
     target.takeDamage(ATTACK_DAMAGE);
     this.attackCooldown = ATTACK_COOLDOWN;
     this._shootEffect(target);
+    this._flashAttackSprite();
+    return true;
   }
 
-  _nearestCreep(creeps) {
+  _pickTarget(creeps, enemyPlayer) {
+    // Priority: creeps/minions first, then enemy player
     let nearest = null;
     let nearestDist = ATTACK_RANGE;
     for (const creep of creeps) {
@@ -64,7 +67,14 @@ export default class Tower {
         nearest = creep;
       }
     }
-    return nearest;
+    if (nearest) return nearest;
+
+    if (enemyPlayer?.data?.isAlive) {
+      const dx = enemyPlayer.sprite.x - this.x;
+      const dy = enemyPlayer.sprite.y - this.y;
+      if (Math.hypot(dx, dy) <= ATTACK_RANGE) return enemyPlayer;
+    }
+    return null;
   }
 
   _shootEffect(target) {
@@ -81,6 +91,14 @@ export default class Tower {
       duration: 200,
       ease: "Linear",
       onComplete: () => line.destroy()
+    });
+  }
+
+  _flashAttackSprite() {
+    if (!this.scene.textures.exists("grail attack")) return;
+    this.sprite.setTexture("grail attack");
+    this.scene.time.delayedCall(300, () => {
+      if (this.sprite?.active) this.sprite.setTexture("grail");
     });
   }
 

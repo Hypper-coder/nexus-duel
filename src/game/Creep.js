@@ -20,10 +20,10 @@ export default class Creep {
       this.sprite = scene.add
         .image(x, y, "goblin")
         .setOrigin(0.5)
-        .setDisplaySize(36, 36);
+        .setDisplaySize(56, 56);
     } else {
       this.sprite = scene.add
-        .rectangle(x, y, 36, 36, 0x22c55e)
+        .rectangle(x, y, 56, 56, 0x22c55e)
         .setOrigin(0.5);
     }
     this.sprite.setDepth(5);
@@ -32,26 +32,44 @@ export default class Creep {
     this.healthBarBg = scene.add.rectangle(x, y - 28, 40, 5, 0x4b0000).setOrigin(0.5).setDepth(19);
   }
 
-  update(delta, target) {
+  update(delta, targets) {
     if (!this.isAlive) return;
 
     const sec = delta / 1000;
     if (this.attackCooldown > 0) this.attackCooldown -= sec;
 
-    if (target && target.data.isAlive) {
-      const dx = target.sprite.x - this.sprite.x;
-      const dy = target.sprite.y - this.sprite.y;
-      const dist = Math.hypot(dx, dy);
+    const candidates = Array.isArray(targets) ? targets : targets ? [targets] : [];
+    let closestTarget = null;
+    let closestDist = Infinity;
+    let dx = 0;
+    let dy = 0;
 
-      if (dist > GOBLIN.attackRange) {
-        const nx = (dx / dist) * GOBLIN.speed * sec;
-        const ny = (dy / dist) * GOBLIN.speed * sec;
-        this.sprite.x = Phaser.Math.Clamp(this.sprite.x + nx, ARENA_SIZE.padding, ARENA_SIZE.width - ARENA_SIZE.padding);
-        this.sprite.y = Phaser.Math.Clamp(this.sprite.y + ny, ARENA_SIZE.padding, ARENA_SIZE.height - ARENA_SIZE.padding);
-      } else if (this.attackCooldown <= 0) {
-        target.takeDamage(GOBLIN.damage);
-        this.attackCooldown = GOBLIN.attackCooldown;
+    for (const candidate of candidates) {
+      if (!candidate || !candidate.data?.isAlive) continue;
+      const candidateDx = candidate.sprite.x - this.sprite.x;
+      const candidateDy = candidate.sprite.y - this.sprite.y;
+      const candidateDist = Math.hypot(candidateDx, candidateDy);
+      if (candidateDist < closestDist) {
+        closestTarget = candidate;
+        closestDist = candidateDist;
+        dx = candidateDx;
+        dy = candidateDy;
       }
+    }
+
+    if (!closestTarget) {
+      return;
+    }
+
+    if (closestDist > GOBLIN.attackRange) {
+      const safeDist = Math.max(closestDist, 1);
+      const nx = (dx / safeDist) * GOBLIN.speed * sec;
+      const ny = (dy / safeDist) * GOBLIN.speed * sec;
+      this.sprite.x = Phaser.Math.Clamp(this.sprite.x + nx, ARENA_SIZE.padding, ARENA_SIZE.width - ARENA_SIZE.padding);
+      this.sprite.y = Phaser.Math.Clamp(this.sprite.y + ny, ARENA_SIZE.padding, ARENA_SIZE.height - ARENA_SIZE.padding);
+    } else if (this.attackCooldown <= 0) {
+      closestTarget.takeDamage(GOBLIN.damage);
+      this.attackCooldown = GOBLIN.attackCooldown;
     }
 
     this.healthBar.x = this.sprite.x;
@@ -70,6 +88,8 @@ export default class Creep {
       this.sprite.destroy();
       this.healthBar.destroy();
       this.healthBarBg.destroy();
+      return;
     }
+    this.healthBar.displayWidth = 40 * Math.max(0, this.health / this.maxHealth);
   }
 }

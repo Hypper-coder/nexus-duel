@@ -29,7 +29,11 @@ export default class PeerConnection {
   }
 
   attachConnection(connection) {
-    if (!connection || this.connections.has(connection.peer)) return;
+    if (!connection) return;
+    // If an existing connection to this peer is already open, keep it
+    const existing = this.connections.get(connection.peer);
+    if (existing && existing.open) return;
+    // Replace stale connection
     this.connections.set(connection.peer, connection);
 
     connection.on("open", () => {
@@ -41,10 +45,21 @@ export default class PeerConnection {
     });
 
     connection.on("close", () => {
-      this.connections.delete(connection.peer);
+      if (this.connections.get(connection.peer) === connection) {
+        this.connections.delete(connection.peer);
+      }
     });
 
-    connection.on("error", (error) => this.callbacks.error.forEach((cb) => cb(error)));
+    connection.on("error", (error) => {
+      if (this.connections.get(connection.peer) === connection) {
+        this.connections.delete(connection.peer);
+      }
+      this.callbacks.error.forEach((cb) => cb(error));
+      // Retry if the remote peer wasn't registered yet
+      if (error.type === "peer-unavailable" && !this.peer.destroyed) {
+        setTimeout(() => this.connectTo(connection.peer), 2000);
+      }
+    });
   }
 
   onReady(callback) {
@@ -80,9 +95,9 @@ export default class PeerConnection {
 
   connectTo(peerId) {
     if (!peerId || peerId === this.peer.id) return null;
-    if (this.connections.has(peerId)) {
-      return this.connections.get(peerId);
-    }
+    const existing = this.connections.get(peerId);
+    if (existing && existing.open) return existing;
+    if (existing) this.connections.delete(peerId); // stale — replace
 
     if (this.peer.disconnected) {
       this.peer.reconnect();

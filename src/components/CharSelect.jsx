@@ -1,4 +1,15 @@
 import { CHAMPIONS } from "../utils/constants";
+import warriorImg from "../assets/warrior.png";
+import mageImg from "../assets/fate caster.png";
+import archerImg from "../assets/fate archer.png";
+import saberImg from "../assets/saber.png";
+
+const CHAMPION_ICONS = {
+  warrior: warriorImg,
+  mage: mageImg,
+  archer: archerImg,
+  saber: saberImg
+};
 
 export default function CharSelect({
   selectedChampion,
@@ -6,54 +17,113 @@ export default function CharSelect({
   onComplete,
   connectedPeers,
   playerId,
-  roomId
+  roomId,
+  champSelections = {},
+  champReadyPeers = [],
+  localChampReady = false
 }) {
+  const allPlayers = [playerId, ...connectedPeers];
+  const allConfirmed =
+    localChampReady &&
+    connectedPeers.length > 0 &&
+    connectedPeers.every((id) => champReadyPeers.includes(id));
+
+  // Champions locked in by someone else (confirmed, not you)
+  const lockedByOther = new Set(
+    connectedPeers
+      .filter((id) => champReadyPeers.includes(id) && champSelections[id])
+      .map((id) => champSelections[id])
+  );
+
   return (
     <section className="panel">
       <h2>Champion Selection</h2>
       <p>Pick a champion before jumping into the arena.</p>
       <div style={{ marginBottom: "1rem" }}>
-        <strong>Room:</strong> {roomId || "Unknown"} · <strong>Players:</strong>{" "}
-        {connectedPeers.length + 1}
+        <strong>Room:</strong> {roomId || "Unknown"}
       </div>
+
       <div style={{ marginBottom: "1rem" }}>
-        <strong>In this room:</strong>
+        <strong>Players ({allPlayers.length}):</strong>
         <ul style={{ margin: 4, paddingLeft: "1rem" }}>
-          <li>{playerId} (you)</li>
-          {connectedPeers.map((peerId) => (
-            <li key={peerId}>{peerId}</li>
-          ))}
+          {allPlayers.map((id) => {
+            const isYou = id === playerId;
+            const sel = champSelections[id];
+            const confirmed = isYou ? localChampReady : champReadyPeers.includes(id);
+            return (
+              <li key={id}>
+                {id}{isYou ? " (you)" : ""} —{" "}
+                {confirmed
+                  ? `✓ Locked in ${CHAMPIONS[sel]?.name ?? sel}`
+                  : sel
+                  ? `Picked ${CHAMPIONS[sel]?.name ?? sel}…`
+                  : "choosing…"}
+              </li>
+            );
+          })}
         </ul>
       </div>
+
       <div className="champion-grid">
-        {Object.values(CHAMPIONS).map((champion) => (
-          <article key={champion.key} className="champion-card">
-            <header>
-              <strong>{champion.name}</strong>
-              <p>{champion.description}</p>
-            </header>
-            <dl>
-              <dt>Health</dt>
-              <dd>{champion.stats.health}</dd>
-              <dt>Mana</dt>
-              <dd>{champion.stats.mana}</dd>
-              <dt>Speed</dt>
-              <dd>{champion.stats.movementSpeed}</dd>
-            </dl>
-            <button
-              type="button"
-              onClick={() => onSelectChampion(champion.key)}
-              disabled={selectedChampion === champion.key}
+        {Object.values(CHAMPIONS).map((champion) => {
+          const takenByOther = lockedByOther.has(champion.key);
+          const isSelected = selectedChampion === champion.key;
+          const isDisabled = localChampReady || takenByOther;
+
+          return (
+            <article
+              key={champion.key}
+              className={[
+                "champion-card",
+                isSelected ? "champion-card--selected" : "",
+                takenByOther ? "champion-card--taken" : ""
+              ].join(" ").trim()}
             >
-              {selectedChampion === champion.key ? "Selected" : "Select"}
-            </button>
-          </article>
-        ))}
+              {CHAMPION_ICONS[champion.key] && (
+                <img
+                  src={CHAMPION_ICONS[champion.key]}
+                  alt={champion.name}
+                  className="champion-card__icon"
+                />
+              )}
+              <header>
+                <strong>{champion.name}</strong>
+                <p>{champion.description}</p>
+              </header>
+              <dl>
+                <dt>Health</dt>
+                <dd>{champion.stats.health}</dd>
+                <dt>Mana</dt>
+                <dd>{champion.stats.mana}</dd>
+                <dt>Speed</dt>
+                <dd>{champion.stats.movementSpeed}</dd>
+              </dl>
+              {takenByOther ? (
+                <button type="button" disabled>Taken</button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onSelectChampion(champion.key)}
+                  disabled={isDisabled}
+                >
+                  {isSelected ? "Selected" : "Select"}
+                </button>
+              )}
+            </article>
+          );
+        })}
       </div>
+
       <div style={{ marginTop: "1rem" }}>
-        <button type="button" onClick={onComplete} disabled={!selectedChampion}>
-          Confirm lineup
-        </button>
+        {!localChampReady ? (
+          <button type="button" onClick={onComplete} disabled={!selectedChampion || lockedByOther.has(selectedChampion)}>
+            Lock in
+          </button>
+        ) : allConfirmed ? (
+          <p style={{ opacity: 0.8 }}>All players locked in — starting…</p>
+        ) : (
+          <p style={{ opacity: 0.6 }}>Waiting for other players to lock in…</p>
+        )}
       </div>
     </section>
   );

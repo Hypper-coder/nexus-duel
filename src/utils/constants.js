@@ -6,7 +6,7 @@
   playerTwoSpawn: { x: 1050, y: 400 }
 };
 
-export const SYNC_INTERVAL_MS = 100;
+export const SYNC_INTERVAL_MS = 50;
 
 export const CHAMPIONS = {
   warrior: {
@@ -18,11 +18,11 @@ export const CHAMPIONS = {
       mana: 200,
       armor: 20,
       magicResist: 5,
-      movementSpeed: 250,
+      movementSpeed: 200,
       manaRegen: 8
     },
     abilities: {
-      q: { name: "Slash", damage: 50, cooldown: 1.5, range: 64, manaCost: 20 },
+      q: { name: "Slash", damage: 80, cooldown: 1.5, range: 100, manaCost: 20 },
       w: { name: "Stun", damage: 0, cooldown: 10, range: 150, manaCost: 60 },
       e: { name: "Shield", cooldown: 8, reduction: 0.3, duration: 4, manaCost: 40 },
       r: { name: "Ultimate", damage: 120, cooldown: 45, aoeRadius: 200, manaCost: 150 }
@@ -41,10 +41,29 @@ export const CHAMPIONS = {
       manaRegen: 10
     },
     abilities: {
-      q: { name: "Arrow Shot", damage: 60, cooldown: 1.0, range: 400, manaCost: 15 },
-      w: { name: "Multi-Shot", damage: 35, cooldown: 6, range: 350, manaCost: 50 },
+      q: { name: "Arrow Shot", damage: 60, cooldown: 1.0, range: 250, manaCost: 15 },
+      w: { name: "Multi-Shot", damage: 35, cooldown: 6, range: 220, manaCost: 50 },
       e: { name: "Roll", cooldown: 10, range: 180, manaCost: 40 },
       r: { name: "Rain of Arrows", damage: 150, cooldown: 40, aoeRadius: 180, manaCost: 130 }
+    }
+  },
+  saber: {
+    key: "saber",
+    name: "Saber",
+    description: "A lightning-fast swordswoman who dashes through enemies with deadly precision.",
+    stats: {
+      health: 600,
+      mana: 250,
+      armor: 18,
+      magicResist: 10,
+      movementSpeed: 340,
+      manaRegen: 9
+    },
+    abilities: {
+      q: { name: "Blade Strike", damage: 90, cooldown: 1.2, range: 150, manaCost: 25 },
+      w: { name: "Sword Dash", damage: 50, cooldown: 7, range: 220, manaCost: 55 },
+      e: { name: "Parry", cooldown: 9, reduction: 0.4, duration: 2, manaCost: 45 },
+      r: { name: "Thousand Blades", damage: 200, cooldown: 40, aoeRadius: 160, manaCost: 140 }
     }
   },
   mage: {
