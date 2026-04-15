@@ -1,14 +1,20 @@
 import { CHAMPIONS } from "../utils/constants";
-import warriorImg from "../assets/warrior.png";
+import bersImg from "../assets/bers.png";
 import mageImg from "../assets/fate caster.png";
 import archerImg from "../assets/fate archer.png";
 import saberImg from "../assets/saber.png";
+import ridderAttackImg from "../assets/fate rider attack.png";
+import assassinImg from "../assets/fate assasin.png";
+import lancerImg from "../assets/fate lancer.png";
 
 const CHAMPION_ICONS = {
-  warrior: warriorImg,
+  warrior: bersImg,
   mage: mageImg,
   archer: archerImg,
-  saber: saberImg
+  saber: saberImg,
+  ridder: ridderAttackImg,
+  assassin: assassinImg,
+  lancer: lancerImg
 };
 
 export default function CharSelect({
@@ -98,6 +104,14 @@ export default function CharSelect({
                 <dt>Speed</dt>
                 <dd>{champion.stats.movementSpeed}</dd>
               </dl>
+              <div className="champion-card__ult">
+                <strong>R — {champion.abilities.r.name}</strong>
+                <span>{champion.abilities.r.damage > 0 ? `${champion.abilities.r.damage} dmg` : ""}
+                  {champion.abilities.r.aoeRadius ? ` · AoE` : ""}
+                  {champion.abilities.r.trueDamage ? ` · True dmg` : ""}
+                  {champion.abilities.r.speedBoost ? ` · Speed ×${champion.abilities.r.speedBoost}` : ""}
+                </span>
+              </div>
               {takenByOther ? (
                 <button type="button" disabled>Taken</button>
               ) : (

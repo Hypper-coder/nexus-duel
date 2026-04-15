@@ -1,5 +1,3 @@
-import Phaser from "phaser";
-import { ARENA_SIZE } from "../utils/constants";
 
 const STATS = {
   health: 150,
@@ -16,6 +14,8 @@ export default class Twitch {
     this.maxHealth = STATS.health;
     this.attackCooldown = 0;
     this.isAlive = true;
+    this.aggroed = false;
+    this.onAggro = null;
 
     this.sprite = scene.textures.exists("twitch")
       ? scene.add.image(x, y, "twitch").setOrigin(0.5).setDisplaySize(60, 60).setDepth(5)
@@ -26,7 +26,7 @@ export default class Twitch {
   }
 
   update(delta, targets) {
-    if (!this.isAlive) return;
+    if (!this.isAlive || !this.aggroed) return;
 
     const sec = delta / 1000;
     if (this.attackCooldown > 0) this.attackCooldown -= sec;
@@ -44,12 +44,10 @@ export default class Twitch {
     if (!nearest) return;
 
     if (nearestDist > STATS.attackRange) {
-      // Move toward target
-      const dx = nearest.sprite.x - this.sprite.x;
-      const dy = nearest.sprite.y - this.sprite.y;
-      const d = Math.max(nearestDist, 1);
-      this.sprite.x = Phaser.Math.Clamp(this.sprite.x + (dx / d) * STATS.speed * sec, ARENA_SIZE.padding, ARENA_SIZE.width - ARENA_SIZE.padding);
-      this.sprite.y = Phaser.Math.Clamp(this.sprite.y + (dy / d) * STATS.speed * sec, ARENA_SIZE.padding, ARENA_SIZE.height - ARENA_SIZE.padding);
+      const nx = (nearest.sprite.x - this.sprite.x) / nearestDist;
+      const ny = (nearest.sprite.y - this.sprite.y) / nearestDist;
+      this.sprite.x += nx * STATS.speed * sec;
+      this.sprite.y += ny * STATS.speed * sec;
     } else if (this.attackCooldown <= 0) {
       nearest.takeDamage(STATS.damage);
       this.attackCooldown = STATS.attackCooldown;
@@ -65,6 +63,10 @@ export default class Twitch {
 
   takeDamage(amount) {
     if (!this.isAlive) return;
+    if (!this.aggroed) {
+      this.aggroed = true;
+      if (this.onAggro) this.onAggro();
+    }
     this.health -= amount;
     if (this.health <= 0) {
       this.health = 0;

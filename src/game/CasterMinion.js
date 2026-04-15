@@ -5,7 +5,7 @@ const STATS = {
   health: 120,
   speed: 140,
   damage: 18,
-  attackRange: 200,
+  attackRange: 120,
   attackCooldown: 2.0
 };
 
@@ -44,8 +44,8 @@ export default class CasterMinion {
       this.sprite.x = Phaser.Math.Clamp(this.sprite.x + (dx / d) * STATS.speed * sec, ARENA_SIZE.padding, ARENA_SIZE.width - ARENA_SIZE.padding);
       this.sprite.y = Phaser.Math.Clamp(this.sprite.y + (dy / d) * STATS.speed * sec, ARENA_SIZE.padding, ARENA_SIZE.height - ARENA_SIZE.padding);
     } else if (this.attackCooldown <= 0) {
-      this.target.takeDamage(STATS.damage);
       this.attackCooldown = STATS.attackCooldown;
+      this.target.takeDamage(STATS.damage);
       this._shootEffect();
     }
 

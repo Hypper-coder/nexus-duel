@@ -188,3 +188,23 @@ button:disabled {
   margin-top: 0.75rem;
   width: 100%;
 }
+
+.champion-card__ult {
+  margin-top: 0.6rem;
+  padding: 0.4rem 0.5rem;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.champion-card__ult strong {
+  font-size: 0.8rem;
+  color: #f59e0b;
+}
+
+.champion-card__ult span {
+  font-size: 0.75rem;
+  opacity: 0.7;
+}

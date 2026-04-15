@@ -29,12 +29,12 @@ export default class Tower {
     this.healthBar = scene.add.rectangle(x, y - 38, 60, 7, tint).setOrigin(0.5).setDepth(20);
 
     this.label = scene.add
-      .text(x, y + 34, "BASE", { fontSize: "10px", color: "#ffffff" })
+      .text(x, y + 34, "", { fontSize: "10px", color: "#ffffff" })
       .setOrigin(0.5)
       .setDepth(21);
   }
 
-  update(delta, creeps, enemyPlayer) {
+  update(delta, creeps, enemyPlayer, alliedPlayers = []) {
     if (!this.isAlive) return;
 
     const sec = delta / 1000;
@@ -43,20 +43,23 @@ export default class Tower {
       return;
     }
 
-    const target = this._pickTarget(creeps, enemyPlayer);
-    if (!target) return false;
-
-    target.takeDamage(ATTACK_DAMAGE);
+    const pick = this._pickTarget(creeps, enemyPlayer);
+    if (!pick) return { fired: false };
+    const { target, targetType } = pick;
+    const damage = this._calculateDamage(target, alliedPlayers);
+    target.takeDamage(damage);
     this.attackCooldown = ATTACK_COOLDOWN;
     this._shootEffect(target);
     this._flashAttackSprite();
-    return true;
+    const killed = this._wasTargetKilled(target);
+    return { fired: true, target, targetType, killed };
   }
 
-  _pickTarget(creeps, enemyPlayer) {
-    // Priority: creeps/minions first, then enemy player
+  _pickTarget(creeps, enemyPlayers) {
+    // Priority: creeps/minions first, then enemy players
     let nearest = null;
     let nearestDist = ATTACK_RANGE;
+    let currentType = null;
     for (const creep of creeps) {
       if (!creep.isAlive) continue;
       const dx = creep.sprite.x - this.x;
@@ -65,16 +68,49 @@ export default class Tower {
       if (dist < nearestDist) {
         nearestDist = dist;
         nearest = creep;
+        currentType = "creep";
       }
     }
-    if (nearest) return nearest;
+    if (nearest) return { target: nearest, targetType: currentType };
 
-    if (enemyPlayer?.data?.isAlive) {
-      const dx = enemyPlayer.sprite.x - this.x;
-      const dy = enemyPlayer.sprite.y - this.y;
-      if (Math.hypot(dx, dy) <= ATTACK_RANGE) return enemyPlayer;
+    const players = Array.isArray(enemyPlayers) ? enemyPlayers : [enemyPlayers];
+    for (const ep of players) {
+      if (!ep?.data?.isAlive) continue;
+      const dx = ep.sprite.x - this.x;
+      const dy = ep.sprite.y - this.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = ep;
+        currentType = "player";
+      }
     }
-    return null;
+    return nearest ? { target: nearest, targetType: currentType } : null;
+  }
+
+  _calculateDamage(target, alliedPlayers) {
+    if (!target?.data) return ATTACK_DAMAGE;
+    const hasAlly = this._hasAllyInRange(alliedPlayers);
+    if (!hasAlly) return ATTACK_DAMAGE;
+    const maxHealth = target.data.stats?.maxHealth ?? target.data.stats?.health ?? 0;
+    return Math.max(1, Math.round(maxHealth * 0.35));
+  }
+
+  _hasAllyInRange(alliedPlayers = []) {
+    if (!Array.isArray(alliedPlayers)) return false;
+    return alliedPlayers.some((ally) => {
+      if (!ally?.data?.isAlive) return false;
+      const dx = ally.sprite.x - this.x;
+      const dy = ally.sprite.y - this.y;
+      return Math.hypot(dx, dy) <= ATTACK_RANGE;
+    });
+  }
+
+  _wasTargetKilled(target) {
+    if (!target) return false;
+    if (typeof target.isAlive === "boolean") return !target.isAlive;
+    if (target?.data) return !target.data.isAlive;
+    return false;
   }
 
   _shootEffect(target) {

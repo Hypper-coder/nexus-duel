@@ -51,9 +51,11 @@ export default class Player {
     this.data.position.y = y;
   }
 
-  takeDamage(amount) {
+  takeDamage(amount, trueDamage = false) {
     if (!this.data.isAlive) return;
-    this.data.stats.health -= amount;
+    const armor = trueDamage ? 0 : (this.data.stats.armor ?? 0);
+    const effective = Math.round(amount * (100 / (100 + armor)));
+    this.data.stats.health -= effective;
     if (this.data.stats.health <= 0) {
       this.data.stats.health = 0;
       this.data.isAlive = false;
@@ -75,9 +77,12 @@ export default class Player {
       }
     });
 
-    const { mana, maxMana, manaRegen } = this.data.stats;
+    const { mana, maxMana, manaRegen, health, maxHealth, healthRegen } = this.data.stats;
     if (mana < maxMana) {
       this.data.stats.mana = Math.min(maxMana, mana + manaRegen * delta);
+    }
+    if (health < maxHealth && healthRegen) {
+      this.data.stats.health = Math.min(maxHealth, health + healthRegen * delta);
     }
   }
 
@@ -93,9 +98,9 @@ export default class Player {
     const key = this.data.championKey;
     const attackKey = `${key} attack`;
     if (!this.scene.textures.exists(attackKey)) return;
-    this.sprite.setTexture(attackKey);
+    this.sprite.setTexture(attackKey).setDisplaySize(72, 72);
     this.scene.time.delayedCall(300, () => {
-      if (this.sprite?.active) this.sprite.setTexture(key);
+      if (this.sprite?.active) this.sprite.setTexture(key).setDisplaySize(72, 72);
     });
   }
 
@@ -104,9 +109,10 @@ export default class Player {
     if (!this.canUseAbility(abilityKey)) return null;
     const ability = this.data.abilities[abilityKey];
     this.useAbility(abilityKey);
-    creep.takeDamage(ability.damage ?? 30);
+    const damage = Math.round((ability.damage ?? 30) * this._damageMultiplier());
+    creep.takeDamage(damage);
     this._flashAttackSprite();
-    return { abilityKey, damage: ability.damage ?? 30 };
+    return { abilityKey, damage, ability };
   }
 
   attack(target, abilityKey) {
@@ -119,13 +125,14 @@ export default class Player {
     if (distance > range) return null;
 
     this.useAbility(abilityKey);
-    const damage = ability.damage ?? 30;
+    const damage = Math.round((ability.damage ?? 30) * this._damageMultiplier());
     target.takeDamage(damage);
     this._flashAttackSprite();
     return {
       damage,
       targetId: target.data.id,
-      abilityKey
+      abilityKey,
+      ability
     };
   }
 
@@ -148,5 +155,27 @@ export default class Player {
         Object.entries(this.data.abilities).map(([key, ab]) => [key, { cooldownRemaining: ab.cooldownRemaining }])
       )
     };
+  }
+
+  getMovementSpeedMultiplier() {
+    if (this.speedBoostActive) return this.data.abilities?.r?.speedBoost ?? 2.0;
+    if (this.data.championKey !== "warrior") return 1;
+    const ratio = this._healthRatio();
+    if (ratio <= 0.25) return 1.3;
+    if (ratio <= 0.5) return 1.2;
+    return 1;
+  }
+
+  _damageMultiplier() {
+    if (this.data.championKey !== "warrior") return 1;
+    const ratio = this._healthRatio();
+    if (ratio <= 0.25) return 1.4;
+    if (ratio <= 0.5) return 1.25;
+    return 1;
+  }
+
+  _healthRatio() {
+    if (!this.data?.stats?.maxHealth) return 0;
+    return Math.max(0, Math.min(1, this.data.stats.health / this.data.stats.maxHealth));
   }
 }

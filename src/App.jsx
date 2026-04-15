@@ -29,28 +29,45 @@ export default function App() {
   const [champReadyPeers, setChampReadyPeers] = useState([]);
   const [localRematch, setLocalRematch] = useState(false);
   const [rematchPeers, setRematchPeers] = useState([]);
-  const [score, setScore] = useState({ local: 0, opponent: 0 });
+  const [score, setScore] = useState({ local: 0, opponents: {} });
+  const [gameMode, setGameMode] = useState("1v1");
+  const [mySlot, setMySlot] = useState(0);
+  const [slotAssignments, setSlotAssignments] = useState({});
 
   const sendSignalRef = useRef(null);
-  // Game component registers a handler here to receive in-game WS messages
   const gameMessageHandlerRef = useRef(null);
-  // Refs so the WS open handler can re-broadcast champ state after reconnect
+  // Refs for values read inside WS event handlers (avoid stale closures)
   const viewRef = useRef(view);
   const championRef = useRef(champion);
+  const localReadyRef = useRef(localReady);
   const localChampReadyRef = useRef(localChampReady);
+  const isHostRef = useRef(isHost);
+  const gameModeRef = useRef(gameMode);
+  const slotAssignmentsRef = useRef(slotAssignments);
   useEffect(() => { viewRef.current = view; }, [view]);
   useEffect(() => { championRef.current = champion; }, [champion]);
+  useEffect(() => { localReadyRef.current = localReady; }, [localReady]);
   useEffect(() => { localChampReadyRef.current = localChampReady; }, [localChampReady]);
+  useEffect(() => { isHostRef.current = isHost; }, [isHost]);
+  useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
+  useEffect(() => { slotAssignmentsRef.current = slotAssignments; }, [slotAssignments]);
 
   const signalingUrl =
     import.meta.env.VITE_WS_URL ??
     `ws://${window.location.hostname}:${import.meta.env.VITE_WS_PORT ?? 8999}`;
 
-  const handleCreateRoom = () => {
+  const handleCreateRoom = (mode = "1v1") => {
     const nextRoom = randomRoomId();
+    const initSlots = { [playerId]: 0 };
     setRoomId(nextRoom);
     setStatusLabel(`Created room ${nextRoom}`);
     setIsHost(true);
+    isHostRef.current = true;
+    setGameMode(mode);
+    gameModeRef.current = mode;
+    setMySlot(0);
+    setSlotAssignments(initSlots);
+    slotAssignmentsRef.current = initSlots;
     setLocalReady(false);
     setReadyPeers([]);
     setLocalChampReady(false);
@@ -64,11 +81,14 @@ export default function App() {
     setRoomId(targetRoomId);
     setStatusLabel(`Joined room ${targetRoomId}`);
     setIsHost(false);
+    isHostRef.current = false;
     setLocalReady(false);
     setReadyPeers([]);
     setLocalChampReady(false);
     setChampReadyPeers([]);
     setChampSelections({});
+    setSlotAssignments({});
+    slotAssignmentsRef.current = {};
     setView(VIEWS.ROOM_INFO);
   };
 
@@ -96,7 +116,7 @@ export default function App() {
     setChampSelections({});
     setLocalRematch(false);
     setRematchPeers([]);
-    setScore({ local: 0, opponent: 0 });
+    setScore({ local: 0, opponents: {} });
     setChampion("warrior");
     setView(VIEWS.LOBBY);
   };
@@ -136,6 +156,24 @@ export default function App() {
           return [...prev, payload.peerId];
         });
         setSignalingStatus(`peer joined ${payload.peerId}`);
+        // Host assigns a slot to the new peer and broadcasts the full config
+        if (isHostRef.current) {
+          const current = slotAssignmentsRef.current;
+          const taken = new Set(Object.values(current));
+          let next = 1;
+          while (taken.has(next)) next++;
+          const updated = { ...current, [payload.peerId]: next };
+          slotAssignmentsRef.current = updated;
+          setSlotAssignments(updated);
+          sendSignalRef.current?.({ type: "room-config", mode: gameModeRef.current, slots: updated });
+        }
+        // Resend ready/champ-ready state so the new peer learns what we already signalled
+        if (localReadyRef.current) {
+          sendSignalRef.current?.({ type: "ready", peerId: playerId });
+        }
+        if (localChampReadyRef.current) {
+          sendSignalRef.current?.({ type: "champ-ready", peerId: playerId, champKey: championRef.current });
+        }
       } else if (payload.type === "peer-left") {
         setConnectedPeers((prev) => prev.filter((id) => id !== payload.peerId));
         setReadyPeers((prev) => prev.filter((id) => id !== payload.peerId));
@@ -143,6 +181,13 @@ export default function App() {
         setChampSelections((prev) => { const n = { ...prev }; delete n[payload.peerId]; return n; });
         setRematchPeers((prev) => prev.filter((id) => id !== payload.peerId));
         setSignalingStatus(`peer left ${payload.peerId}`);
+      } else if (payload.type === "room-config") {
+        setGameMode(payload.mode);
+        gameModeRef.current = payload.mode;
+        setSlotAssignments(payload.slots);
+        slotAssignmentsRef.current = payload.slots;
+        const slot = payload.slots[playerId];
+        if (slot !== undefined) setMySlot(slot);
       } else if (payload.type === "ready") {
         setReadyPeers((prev) => prev.includes(payload.peerId) ? prev : [...prev, payload.peerId]);
       } else if (payload.type === "champ-select") {
@@ -169,7 +214,6 @@ export default function App() {
     socket.addEventListener("open", () => {
       setSignalingStatus("connected to signaling server");
       socket.send(JSON.stringify({ type: "join", roomId, peerId: playerId }));
-      // Re-broadcast champ state if WS reconnects while in champion select
       if (viewRef.current === VIEWS.CHAMP_SELECT) {
         const champKey = championRef.current;
         socket.send(JSON.stringify({ type: "champ-select", peerId: playerId, champKey }));
@@ -206,14 +250,16 @@ export default function App() {
     };
   }, [roomId, signalingUrl, retryKey, playerId]);
 
-  // Auto-advance to champion select once every connected peer is ready
+  const requiredPeers = gameMode === "ffa" ? 3 : 1;
+
+  // Auto-advance to champion select once enough peers are present and all are ready
   useEffect(() => {
     if (view !== VIEWS.ROOM_INFO) return;
-    if (!localReady || connectedPeers.length === 0) return;
+    if (!localReady || connectedPeers.length < requiredPeers) return;
     if (connectedPeers.every((id) => readyPeers.includes(id))) {
       setView(VIEWS.CHAMP_SELECT);
     }
-  }, [localReady, readyPeers, connectedPeers, view]);
+  }, [localReady, readyPeers, connectedPeers, view, requiredPeers]);
 
   // When entering champ select, broadcast current selection so the other player sees it immediately
   useEffect(() => {
@@ -226,13 +272,13 @@ export default function App() {
   // Auto-advance to game once every connected peer has confirmed their champion
   useEffect(() => {
     if (view !== VIEWS.CHAMP_SELECT) return;
-    if (!localChampReady || connectedPeers.length === 0) return;
+    if (!localChampReady || connectedPeers.length < requiredPeers) return;
     if (connectedPeers.every((id) => champReadyPeers.includes(id))) {
       setView(VIEWS.GAME);
     }
-  }, [localChampReady, champReadyPeers, connectedPeers, view]);
+  }, [localChampReady, champReadyPeers, connectedPeers, view, requiredPeers]);
 
-  // Rematch: both players agreed → go back to champ select and reset round state
+  // Rematch: all players agreed → go back to champ select and reset round state
   useEffect(() => {
     if (view !== VIEWS.GAME) return;
     if (!localRematch || connectedPeers.length === 0) return;
@@ -273,6 +319,7 @@ export default function App() {
           localReady={localReady}
           readyPeers={readyPeers}
           onReady={handleLocalReady}
+          gameMode={gameMode}
         />
       )}
 
@@ -300,9 +347,19 @@ export default function App() {
           wsSend={wsSend}
           onRegisterGameHandler={onRegisterGameHandler}
           score={score}
-          onScoreUpdate={(delta) => setScore((prev) => ({ local: prev.local + delta.local, opponent: prev.opponent + delta.opponent }))}
+          onScoreUpdate={(delta) => setScore((prev) => {
+            const newOpponents = { ...prev.opponents };
+            if (delta.opponentId) {
+              newOpponents[delta.opponentId] = (newOpponents[delta.opponentId] ?? 0) + (delta.opponent ?? 0);
+            }
+            return { local: prev.local + (delta.local ?? 0), opponents: newOpponents };
+          })}
           onReturnToLobby={handleReturnToLobby}
           onRematch={handleRematch}
+          gameMode={gameMode}
+          mySlot={mySlot}
+          slotAssignments={slotAssignments}
+          champSelections={champSelections}
         />
       )}
     </div>

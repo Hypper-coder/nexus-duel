@@ -2,22 +2,27 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Phaser from "phaser";
 import GameScene from "../game/GameScene";
 import GameSync from "../network/GameSync";
-import { ARENA_SIZE } from "../utils/constants";
+import { ARENA_SIZE, PLAYER_SLOTS } from "../utils/constants";
 
-export default function Game({ champion, roomId, playerId, signalingStatus, isHost, wsSend, onRegisterGameHandler, score, onScoreUpdate, onReturnToLobby, onRematch }) {
+export default function Game({ champion, roomId, playerId, signalingStatus, isHost, wsSend, onRegisterGameHandler, score, onScoreUpdate, onReturnToLobby, onRematch, gameMode, mySlot, slotAssignments, champSelections }) {
   const containerRef = useRef(null);
   const [status, setStatus] = useState("Initializing scene...");
   const [gameOver, setGameOver] = useState(null); // "victory" | "defeat" | "draw"
   const [rematchRequested, setRematchRequested] = useState(false);
 
+  const opponentEntries = useMemo(() =>
+    Object.entries(slotAssignments ?? {})
+      .filter(([id]) => id !== playerId)
+      .sort((a, b) => a[1] - b[1])
+      .map(([id, slot]) => ({ id, slot })),
+  [slotAssignments, playerId]);
+
   useEffect(() => {
     setStatus(signalingStatus);
   }, [signalingStatus]);
 
-  // GameSync uses the WebSocket channel — no WebRTC needed
   const gameSync = useMemo(() => new GameSync(wsSend), [wsSend]);
 
-  // Register this game's incoming message handler with App so WS messages reach the scene
   useEffect(() => {
     onRegisterGameHandler((payload) => gameSync.onIncoming(payload));
     return () => onRegisterGameHandler(null);
@@ -26,10 +31,22 @@ export default function Game({ champion, roomId, playerId, signalingStatus, isHo
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const localTint = isHost ? 0x7c3aed : 0x0ea5e9;
-    const remoteTint = isHost ? 0x0ea5e9 : 0x7c3aed;
-    const localSpawn = isHost ? ARENA_SIZE.playerOneSpawn : ARENA_SIZE.playerTwoSpawn;
-    const remoteSpawn = isHost ? ARENA_SIZE.playerTwoSpawn : ARENA_SIZE.playerOneSpawn;
+    const slot = mySlot ?? (isHost ? 0 : 1);
+    const slotDef = PLAYER_SLOTS[slot];
+    const localTint = slotDef.tint;
+    const localSpawn = slotDef.spawn;
+
+    // Compute opponent slot info
+    const opponentSlots = Object.entries(slotAssignments ?? {})
+      .filter(([id]) => id !== playerId)
+      .map(([id, s]) => ({ id, slot: s, championKey: (champSelections ?? {})[id] ?? "warrior" }))
+      .sort((a, b) => a.slot - b.slot);
+
+    // Fallback for 1v1 when slotAssignments not yet populated
+    const remoteSlot = opponentSlots[0]?.slot ?? (slot === 0 ? 1 : 0);
+    const remoteDef = PLAYER_SLOTS[remoteSlot];
+    const remoteTint = remoteDef.tint;
+    const remoteSpawn = remoteDef.spawn;
 
     const config = {
       type: Phaser.AUTO,
@@ -45,6 +62,9 @@ export default function Game({ champion, roomId, playerId, signalingStatus, isHo
           remoteTint,
           localSpawn,
           remoteSpawn,
+          gameMode: gameMode ?? "1v1",
+          mySlot: slot,
+          opponentSlots: opponentSlots.length > 0 ? opponentSlots : [{ id: "peer_remote", slot: remoteSlot }],
           onGameOver: (result) => setGameOver(result),
           onScoreUpdate
         })
@@ -74,6 +94,8 @@ export default function Game({ champion, roomId, playerId, signalingStatus, isHo
 
   const overlayLabel = gameOver === "victory" ? "Victory!" : gameOver === "defeat" ? "Defeat" : "Draw";
 
+  const isFfa = gameMode === "ffa";
+
   return (
     <div className="game-fullscreen">
       <div ref={containerRef} className="game-fullscreen__canvas" />
@@ -82,8 +104,11 @@ export default function Game({ champion, roomId, playerId, signalingStatus, isHo
       </div>
       <div className="game-scoreboard-hud">
         <span className="game-scoreboard-hud__entry game-scoreboard-hud__entry--you">You  {score.local}</span>
-        <span className="game-scoreboard-hud__divider">–</span>
-        <span className="game-scoreboard-hud__entry game-scoreboard-hud__entry--opp">{score.opponent}  Opp</span>
+        {opponentEntries.map(({ id, slot }) => (
+          <span key={id} className="game-scoreboard-hud__entry game-scoreboard-hud__entry--opp">
+            {isFfa ? `P${slot + 1}` : "Opp"}  {score.opponents?.[id] ?? 0}
+          </span>
+        ))}
       </div>
       {gameOver && (
         <div className="game-over-overlay">
@@ -101,10 +126,12 @@ export default function Game({ champion, roomId, playerId, signalingStatus, isHo
                   <td>You</td>
                   <td>{score.local}</td>
                 </tr>
-                <tr>
-                  <td>Opponent</td>
-                  <td>{score.opponent}</td>
-                </tr>
+                {opponentEntries.map(({ id, slot }) => (
+                  <tr key={id}>
+                    <td>{isFfa ? `Player ${slot + 1}` : "Opponent"}</td>
+                    <td>{score.opponents?.[id] ?? 0}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
             <div className="game-over-actions">

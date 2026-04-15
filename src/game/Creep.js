@@ -15,6 +15,8 @@ export default class Creep {
     this.maxHealth = GOBLIN.health;
     this.attackCooldown = 0;
     this.isAlive = true;
+    this.aggroed = false;
+    this.onAggro = null;
 
     if (scene.textures.exists("goblin")) {
       this.sprite = scene.add
@@ -33,7 +35,7 @@ export default class Creep {
   }
 
   update(delta, targets) {
-    if (!this.isAlive) return;
+    if (!this.isAlive || !this.aggroed) return;
 
     const sec = delta / 1000;
     if (this.attackCooldown > 0) this.attackCooldown -= sec;
@@ -81,6 +83,10 @@ export default class Creep {
 
   takeDamage(amount) {
     if (!this.isAlive) return;
+    if (!this.aggroed) {
+      this.aggroed = true;
+      if (this.onAggro) this.onAggro();
+    }
     this.health -= amount;
     if (this.health <= 0) {
       this.health = 0;

@@ -14,7 +14,8 @@ export function buildChampionState(key, playerId, position) {
       ,
       maxHealth: definition.stats.health,
       maxMana: definition.stats.mana,
-      manaRegen: definition.stats.manaRegen ?? 8
+      manaRegen: definition.stats.manaRegen ?? 8,
+      healthRegen: definition.stats.healthRegen ?? 2
     },
     position: { ...position },
     abilities: Object.entries(definition.abilities).reduce((acc, [abilityKey, ability]) => {
@@ -24,7 +25,10 @@ export function buildChampionState(key, playerId, position) {
         manaCost: ability.manaCost ?? 0,
         range: ability.range ?? 0,
         damage: ability.damage ?? 0,
-        name: ability.name
+        aoeRadius: ability.aoeRadius ?? 0,
+        name: ability.name,
+        ...(ability.speedBoost !== undefined && { speedBoost: ability.speedBoost, speedBoostDuration: ability.speedBoostDuration ?? 3 }),
+        ...(ability.trueDamage !== undefined && { trueDamage: ability.trueDamage })
       };
       return acc;
     }, {}),
