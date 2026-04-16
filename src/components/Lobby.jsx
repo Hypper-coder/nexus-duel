@@ -96,30 +96,6 @@ export default function Lobby({ onCreateRoom, onJoinRoom, statusLabel, connected
         </div>
       </div>
 
-      <div style={{ marginTop: "1.5rem", borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: "1.25rem" }}>
-        <strong style={{ fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.05em", opacity: 0.5 }}>Controls</strong>
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.9rem", marginTop: "0.85rem" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 32px)", gridTemplateRows: "repeat(2, 32px)", gap: "3px" }}>
-              <div />
-              <Key label="W" />
-              <div />
-              <Key label="A" />
-              <Key label="S" />
-              <Key label="D" />
-            </div>
-            <span style={{ fontSize: "0.88rem", opacity: 0.7 }}>Move</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-            <Key label="Space" wide />
-            <span style={{ fontSize: "0.88rem", opacity: 0.7 }}>Basic attack</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-            <Key label="R" accent />
-            <span style={{ fontSize: "0.88rem", opacity: 0.7 }}>Ultimate — targets nearest enemy champion</span>
-          </div>
-        </div>
-      </div>
     </section>
   );
 }
@@ -153,31 +129,6 @@ function ScoreRow({ pts, label, color }) {
         +{pts}
       </span>
       <span style={{ fontSize: "0.88rem", opacity: 0.75 }}>{label}</span>
-    </div>
-  );
-}
-
-function Key({ label, wide, accent }) {
-  return (
-    <div style={{
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      minWidth: wide ? "88px" : "32px",
-      height: "32px",
-      padding: "0 6px",
-      borderRadius: "5px",
-      border: accent ? "1px solid rgba(255, 100, 0, 0.7)" : "1px solid rgba(255,255,255,0.25)",
-      background: accent ? "rgba(255, 100, 0, 0.12)" : "rgba(255,255,255,0.06)",
-      fontSize: "0.75rem",
-      fontWeight: "700",
-      letterSpacing: "0.03em",
-      color: accent ? "#ff8c3a" : "rgba(255,255,255,0.75)",
-      boxShadow: "0 2px 0 rgba(0,0,0,0.4)",
-      userSelect: "none",
-      flexShrink: 0,
-    }}>
-      {label}
     </div>
   );
 }

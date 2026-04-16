@@ -18,6 +18,7 @@ export default class Player {
     }
 
     this.attackCooldown = 0;
+    this.undyingActive = false;
   }
 
   move(velocity, delta, rocks = []) {
@@ -55,6 +56,11 @@ export default class Player {
     if (!this.data.isAlive) return;
     const armor = trueDamage ? 0 : (this.data.stats.armor ?? 0);
     const effective = Math.round(amount * (100 / (100 + armor)));
+    if (this.undyingActive) {
+      const minHp = Math.ceil((this.data.stats.maxHealth ?? 700) * 0.03);
+      this.data.stats.health = Math.max(minHp, this.data.stats.health - effective);
+      return;
+    }
     this.data.stats.health -= effective;
     if (this.data.stats.health <= 0) {
       this.data.stats.health = 0;

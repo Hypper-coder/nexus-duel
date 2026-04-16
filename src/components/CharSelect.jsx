@@ -34,7 +34,6 @@ export default function CharSelect({
     connectedPeers.length > 0 &&
     connectedPeers.every((id) => champReadyPeers.includes(id));
 
-  // Champions locked in by someone else (confirmed, not you)
   const lockedByOther = new Set(
     connectedPeers
       .filter((id) => champReadyPeers.includes(id) && champSelections[id])
@@ -42,32 +41,58 @@ export default function CharSelect({
   );
 
   return (
-    <section className="panel">
-      <h2>Champion Selection</h2>
-      <p>Pick a champion before jumping into the arena.</p>
-      <div style={{ marginBottom: "1rem" }}>
-        <strong>Room:</strong> {roomId || "Unknown"}
+    <section className="panel char-select">
+      <h2 className="char-select__title">Champion Selection</h2>
+      <p className="char-select__subtitle">Choose your champion and lock in before the battle begins.</p>
+
+      <div className="char-select__meta">
+        <span>Room</span>
+        <span className="char-select__room">{roomId || "Unknown"}</span>
       </div>
 
-      <div style={{ marginBottom: "1rem" }}>
-        <strong>Players ({allPlayers.length}):</strong>
-        <ul style={{ margin: 4, paddingLeft: "1rem" }}>
-          {allPlayers.map((id) => {
-            const isYou = id === playerId;
-            const sel = champSelections[id];
-            const confirmed = isYou ? localChampReady : champReadyPeers.includes(id);
-            return (
-              <li key={id}>
-                {id}{isYou ? " (you)" : ""} —{" "}
+      <div className="char-select__players">
+        {allPlayers.map((id) => {
+          const isYou = id === playerId;
+          const sel = champSelections[id];
+          const confirmed = isYou ? localChampReady : champReadyPeers.includes(id);
+          return (
+            <div
+              key={id}
+              className={[
+                "char-select__player",
+                isYou ? "char-select__player--you" : "",
+                confirmed ? "char-select__player--locked" : ""
+              ].join(" ").trim()}
+            >
+              <div className="char-select__player-dot" />
+              <span>
+                {isYou ? "You" : id}
                 {confirmed
-                  ? `✓ Locked in ${CHAMPIONS[sel]?.name ?? sel}`
+                  ? ` — locked ${CHAMPIONS[sel]?.name ?? sel}`
                   : sel
-                  ? `Picked ${CHAMPIONS[sel]?.name ?? sel}…`
-                  : "choosing…"}
-              </li>
-            );
-          })}
-        </ul>
+                  ? ` — ${CHAMPIONS[sel]?.name ?? sel}…`
+                  : " — choosing…"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="char-select__lockin">
+        {!localChampReady ? (
+          <button
+            type="button"
+            className="btn-lockin"
+            onClick={onComplete}
+            disabled={!selectedChampion || lockedByOther.has(selectedChampion)}
+          >
+            Lock In
+          </button>
+        ) : allConfirmed ? (
+          <p style={{ opacity: 0.8, margin: 0 }}>All players locked in — starting…</p>
+        ) : (
+          <p style={{ opacity: 0.5, margin: 0 }}>Waiting for other players…</p>
+        )}
       </div>
 
       <div className="champion-grid">
@@ -84,60 +109,59 @@ export default function CharSelect({
                 isSelected ? "champion-card--selected" : "",
                 takenByOther ? "champion-card--taken" : ""
               ].join(" ").trim()}
+              onClick={() => !isDisabled && onSelectChampion(champion.key)}
             >
-              {CHAMPION_ICONS[champion.key] && (
-                <img
-                  src={CHAMPION_ICONS[champion.key]}
-                  alt={champion.name}
-                  className="champion-card__icon"
-                />
-              )}
-              <header>
-                <strong>{champion.name}</strong>
-                <p>{champion.description}</p>
-              </header>
-              <dl>
-                <dt>Health</dt>
-                <dd>{champion.stats.health}</dd>
-                <dt>Mana</dt>
-                <dd>{champion.stats.mana}</dd>
-                <dt>Speed</dt>
-                <dd>{champion.stats.movementSpeed}</dd>
-              </dl>
-              <div className="champion-card__ult">
-                <strong>R — {champion.abilities.r.name}</strong>
-                <span>{champion.abilities.r.damage > 0 ? `${champion.abilities.r.damage} dmg` : ""}
-                  {champion.abilities.r.aoeRadius ? ` · AoE` : ""}
-                  {champion.abilities.r.trueDamage ? ` · True dmg` : ""}
-                  {champion.abilities.r.speedBoost ? ` · Speed ×${champion.abilities.r.speedBoost}` : ""}
-                </span>
+              <div className="champion-card__img-wrap">
+                {CHAMPION_ICONS[champion.key] && (
+                  <img
+                    src={CHAMPION_ICONS[champion.key]}
+                    alt={champion.name}
+                    className="champion-card__icon"
+                  />
+                )}
               </div>
-              {takenByOther ? (
-                <button type="button" disabled>Taken</button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => onSelectChampion(champion.key)}
-                  disabled={isDisabled}
-                >
-                  {isSelected ? "Selected" : "Select"}
-                </button>
-              )}
+
+              <div className="champion-card__body">
+                <div className="champion-card__name">{champion.name}</div>
+                <div className="champion-card__desc">{champion.description}</div>
+
+                <div className="champion-card__stats">
+                  <div className="champion-card__stat">
+                    <span className="champion-card__stat-label"><span>♥</span> HP</span>
+                    <span className="champion-card__stat-val">{champion.stats.health}</span>
+                  </div>
+                  <div className="champion-card__stat">
+                    <span className="champion-card__stat-label"><span>◆</span> Mana</span>
+                    <span className="champion-card__stat-val">{champion.stats.mana}</span>
+                  </div>
+                  <div className="champion-card__stat">
+                    <span className="champion-card__stat-label"><span>⚡</span> Speed</span>
+                    <span className="champion-card__stat-val">{champion.stats.movementSpeed}</span>
+                  </div>
+                </div>
+
+                <div className="champion-card__ult">
+                  <strong>R — {champion.abilities.r.name}</strong>
+                  <span>
+                    {champion.abilities.r.undyingRage ? "5s invulnerability · heals at low HP" : ""}
+                    {!champion.abilities.r.undyingRage && champion.abilities.r.damage > 0 ? `${champion.abilities.r.damage} dmg` : ""}
+                    {champion.abilities.r.aoeRadius ? " · AoE" : ""}
+                    {champion.abilities.r.trueDamage ? " · True dmg" : ""}
+                    {champion.abilities.r.speedBoost ? ` · Speed ×${champion.abilities.r.speedBoost}` : ""}
+                  </span>
+                </div>
+
+                {takenByOther ? (
+                  <button type="button" disabled>Taken</button>
+                ) : (
+                  <button type="button" disabled={isDisabled}>
+                    {isSelected ? "Selected" : "Select"}
+                  </button>
+                )}
+              </div>
             </article>
           );
         })}
-      </div>
-
-      <div style={{ marginTop: "1rem" }}>
-        {!localChampReady ? (
-          <button type="button" onClick={onComplete} disabled={!selectedChampion || lockedByOther.has(selectedChampion)}>
-            Lock in
-          </button>
-        ) : allConfirmed ? (
-          <p style={{ opacity: 0.8 }}>All players locked in — starting…</p>
-        ) : (
-          <p style={{ opacity: 0.6 }}>Waiting for other players to lock in…</p>
-        )}
       </div>
     </section>
   );

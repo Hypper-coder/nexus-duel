@@ -13,10 +13,10 @@ export const GAME_MODES = {
 
 // One entry per player slot — order must be stable (slot 0 = host)
 export const PLAYER_SLOTS = [
-  { tint: 0x7c3aed, spawn: { x: 150, y: 400 },  towerPos: { x: 150, y: 400 }  }, // purple – left
+  { tint: 0x7c3aed, spawn: { x: 150,  y: 400 }, towerPos: { x: 150,  y: 400 } }, // purple – left
   { tint: 0x0ea5e9, spawn: { x: 1050, y: 400 }, towerPos: { x: 1050, y: 400 } }, // blue   – right
-  { tint: 0xfbbf24, spawn: { x: 600, y: 80 },   towerPos: { x: 600, y: 80 }   }, // yellow – top
-  { tint: 0x22c55e, spawn: { x: 600, y: 720 },  towerPos: { x: 600, y: 720 }  }, // green  – bottom
+  { tint: 0xfbbf24, spawn: { x: 600,  y: 80  }, towerPos: { x: 600,  y: 80  } }, // yellow – top
+  { tint: 0x22c55e, spawn: { x: 600,  y: 720 }, towerPos: { x: 600,  y: 720 } }, // green  – bottom
 ];
 
 export const SYNC_INTERVAL_MS = 50;
@@ -37,7 +37,7 @@ export const CHAMPIONS = {
     },
     abilities: {
       q: { name: "Berserk Strike", damage: 90, cooldown: 1.2, range: 130, manaCost: 15 },
-      r: { name: "God Hand", damage: 200, cooldown: 55, range: 150, aoeRadius: 220, manaCost: 100 }
+      r: { name: "Undying Rage", cooldown: 55, manaCost: 100, undyingRage: true }
     }
   },
   archer: {
@@ -109,7 +109,7 @@ export const CHAMPIONS = {
     },
     abilities: {
       q: { name: "Nail", damage: 52, cooldown: 0.9, range: 115, manaCost: 18 },
-      r: { name: "Bellerophon", damage: 205, cooldown: 30, range: 350, aoeRadius: 180, manaCost: 160 }
+      r: { name: "Bellerophon", damage: 0, cooldown: 30, range: 0, manaCost: 160, speedBoost: 2.5, speedBoostDuration: 2.5 }
     }
   },
   lancer: {
@@ -144,7 +144,7 @@ export const CHAMPIONS = {
       healthRegen: 3
     },
     abilities: {
-      q: { name: "Fireball", damage: 72, cooldown: 1.5, range: 320, manaCost: 55, aoeRadius: 110 },
+      q: { name: "Fireball", damage: 72, cooldown: 1.5, range: 280, manaCost: 55, aoeRadius: 110 },
       r: { name: "Rule Breaker", damage: 155, cooldown: 45, range: 300, manaCost: 250, trueDamage: true }
     }
   }

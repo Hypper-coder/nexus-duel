@@ -288,6 +288,7 @@ export default function App() {
       setLocalChampReady(false);
       setChampReadyPeers([]);
       setChampSelections({});
+      setScore({ local: 0, opponents: {} });
       setView(VIEWS.CHAMP_SELECT);
     }
   }, [localRematch, rematchPeers, connectedPeers, view]);

@@ -71,6 +71,9 @@ export default function Game({ champion, roomId, playerId, signalingStatus, isHo
       ],
       backgroundColor: "#0f172a",
       audio: { noAudio: true },
+      // Use setTimeout instead of requestAnimationFrame so the game loop keeps
+      // ticking even when the host's browser tab is hidden/backgrounded.
+      fps: { target: 60, forceSetTimeOut: true },
       scale: {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH,
@@ -80,6 +83,10 @@ export default function Game({ champion, roomId, playerId, signalingStatus, isHo
     };
 
     const game = new Phaser.Game(config);
+
+    // Prevent Phaser from pausing when the window loses focus (alt+tab, etc.)
+    game.events.on(Phaser.Core.Events.BLUR,   () => game.resume());
+    game.events.on(Phaser.Core.Events.HIDDEN, () => game.resume());
 
     return () => {
       game.destroy(true);

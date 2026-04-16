@@ -1,12 +1,12 @@
 const ATTACK_RANGE = 200;
-const ATTACK_DAMAGE = 40;
+const ATTACK_DAMAGE = 50;
 const ATTACK_COOLDOWN = 1.2;
 
 export default class Tower {
   constructor(scene, x, y, tint) {
     this.scene = scene;
-    this.health = 1000;
-    this.maxHealth = 1000;
+    this.health = 600;
+    this.maxHealth = 600;
     this.isAlive = true;
     this.x = x;
     this.y = y;
@@ -25,6 +25,13 @@ export default class Tower {
     }
     this.sprite.setDepth(4);
 
+    const rangeCircle = scene.add.graphics();
+    rangeCircle.lineStyle(2, 0xff2222, 0.35);
+    rangeCircle.strokeCircle(x, y, ATTACK_RANGE);
+    rangeCircle.fillStyle(0xff2222, 0.08);
+    rangeCircle.fillCircle(x, y, ATTACK_RANGE);
+    rangeCircle.setDepth(2);
+
     this.healthBarBg = scene.add.rectangle(x, y - 38, 60, 7, 0x1f1f1f).setOrigin(0.5).setDepth(19);
     this.healthBar = scene.add.rectangle(x, y - 38, 60, 7, tint).setOrigin(0.5).setDepth(20);
 
@@ -34,7 +41,7 @@ export default class Tower {
       .setDepth(21);
   }
 
-  update(delta, creeps, enemyPlayer, alliedPlayers = []) {
+  update(delta, creeps, enemyPlayer, alliedPlayers = [], twitches = []) {
     if (!this.isAlive) return;
 
     const sec = delta / 1000;
@@ -43,11 +50,11 @@ export default class Tower {
       return;
     }
 
-    const pick = this._pickTarget(creeps, enemyPlayer);
+    const pick = this._pickTarget(creeps, enemyPlayer, twitches);
     if (!pick) return { fired: false };
     const { target, targetType } = pick;
-    const damage = this._calculateDamage(target, alliedPlayers);
-    target.takeDamage(damage);
+    const damage = this._calculateDamage(target, targetType, alliedPlayers);
+    target.takeDamage(damage, true);
     this.attackCooldown = ATTACK_COOLDOWN;
     this._shootEffect(target);
     this._flashAttackSprite();
@@ -55,45 +62,46 @@ export default class Tower {
     return { fired: true, target, targetType, killed };
   }
 
-  _pickTarget(creeps, enemyPlayers) {
-    // Priority: creeps/minions first, then enemy players
+  _pickTarget(creeps, enemyPlayers, twitches = []) {
+    const players = Array.isArray(enemyPlayers) ? enemyPlayers : [enemyPlayers];
+
+    // Priority 1: enemy champions
     let nearest = null;
     let nearestDist = ATTACK_RANGE;
     let currentType = null;
-    for (const creep of creeps) {
-      if (!creep.isAlive) continue;
-      const dx = creep.sprite.x - this.x;
-      const dy = creep.sprite.y - this.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist < nearestDist) {
-        nearestDist = dist;
-        nearest = creep;
-        currentType = "creep";
-      }
+    for (const ep of players) {
+      if (!ep?.data?.isAlive) continue;
+      const dist = Math.hypot(ep.sprite.x - this.x, ep.sprite.y - this.y);
+      if (dist < nearestDist) { nearestDist = dist; nearest = ep; currentType = "player"; }
     }
     if (nearest) return { target: nearest, targetType: currentType };
 
-    const players = Array.isArray(enemyPlayers) ? enemyPlayers : [enemyPlayers];
-    for (const ep of players) {
-      if (!ep?.data?.isAlive) continue;
-      const dx = ep.sprite.x - this.x;
-      const dy = ep.sprite.y - this.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist < nearestDist) {
-        nearestDist = dist;
-        nearest = ep;
-        currentType = "player";
-      }
+    // Priority 2: caster minions and twitches
+    const elites = [...creeps.filter(c => c.constructor?.name === "CasterMinion"), ...twitches];
+    for (const e of elites) {
+      if (!e.isAlive) continue;
+      const dist = Math.hypot(e.sprite.x - this.x, e.sprite.y - this.y);
+      if (dist < nearestDist) { nearestDist = dist; nearest = e; currentType = "creep"; }
+    }
+    if (nearest) return { target: nearest, targetType: currentType };
+
+    // Priority 3: regular creeps
+    for (const c of creeps) {
+      if (!c.isAlive || c.constructor?.name === "CasterMinion") continue;
+      const dist = Math.hypot(c.sprite.x - this.x, c.sprite.y - this.y);
+      if (dist < nearestDist) { nearestDist = dist; nearest = c; currentType = "creep"; }
     }
     return nearest ? { target: nearest, targetType: currentType } : null;
   }
 
-  _calculateDamage(target, alliedPlayers) {
-    if (!target?.data) return ATTACK_DAMAGE;
+  _calculateDamage(target, targetType, alliedPlayers) {
+    if (targetType !== "player") return ATTACK_DAMAGE;
+    const ownerAlive = Array.isArray(alliedPlayers) && alliedPlayers.some(a => a?.data?.isAlive);
+    if (!ownerAlive) return 40;
     const hasAlly = this._hasAllyInRange(alliedPlayers);
     if (!hasAlly) return ATTACK_DAMAGE;
-    const maxHealth = target.data.stats?.maxHealth ?? target.data.stats?.health ?? 0;
-    return Math.max(1, Math.round(maxHealth * 0.35));
+    const maxHealth = target?.data?.stats?.maxHealth ?? target?.data?.stats?.health ?? 0;
+    return ATTACK_DAMAGE + Math.round(maxHealth * 0.30);
   }
 
   _hasAllyInRange(alliedPlayers = []) {

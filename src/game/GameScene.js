@@ -59,6 +59,8 @@ export default class GameScene extends Phaser.Scene {
     this.respawnScheduled = false;
     this.lastStandUsed = false;
     this.localKills = 0;
+    // 1=champions  2=towers  3=creeps/minions/twitches  4=closest
+    this.targetMode = 4;
     // For FFA: track kills per opponent id
     this.lastOpponentKillsMap = {};
     this.opponentSlots.forEach(({ id }) => { this.lastOpponentKillsMap[id] = 0; });
@@ -122,6 +124,10 @@ export default class GameScene extends Phaser.Scene {
     this.cursors = this.input.keyboard.addKeys("W,S,A,D");
     this.attackKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
     this.ultimateKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R);
+    this.targetKey1 = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ONE);
+    this.targetKey2 = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.TWO);
+    this.targetKey3 = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.THREE);
+    this.targetKey4 = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.FOUR);
 
     if (this.gameSync) {
       this.remoteSubscription = this.gameSync.onRemoteState((payload) => this.applyRemoteState(payload));
@@ -150,7 +156,20 @@ export default class GameScene extends Phaser.Scene {
     // Alias for 1v1 code paths
     this.opponentBars = this.opponentBarsList[0];
 
-    this.rocks = this.placeRocks();
+    this._buildRangeIndicators();
+
+    if (this.isHost) {
+      this.rocks = this.placeRocks();
+      if (this.gameSync) {
+        this.gameSync.send({
+          type: "rock-layout",
+          positions: this.rocks.map(r => ({ x: r.x, y: r.y })),
+          roomId: this.roomId
+        });
+      }
+    } else {
+      this.rocks = [];
+    }
     const spawnGemstone = () => new Gemstone(this, () => this.getRandomGemPosition());
     this.gemstones = [spawnGemstone(), spawnGemstone()];
     this.creeps = [];
@@ -167,12 +186,12 @@ export default class GameScene extends Phaser.Scene {
           const target = this.opponents.find(o => o.data.isAlive) ?? this.opponents[0];
           if (target) {
             const localTowerPos = PLAYER_SLOTS[this.mySlot].towerPos;
-            this.casterMinions.push(new CasterMinion(this, localTowerPos.x, localTowerPos.y, target, PLAYER_SLOTS[this.mySlot].tint, `slot${this.mySlot}`));
+            this.casterMinions.push(new CasterMinion(this, localTowerPos.x, localTowerPos.y, target, PLAYER_SLOTS[this.mySlot].tint, `slot${this.mySlot}`, this.playerId));
           }
           // Each opponent tower sends a minion toward local player
-          this.opponentSlots.forEach(({ slot }) => {
+          this.opponentSlots.forEach(({ id, slot }) => {
             const slotDef = PLAYER_SLOTS[slot] ?? PLAYER_SLOTS[1];
-            this.casterMinions.push(new CasterMinion(this, slotDef.towerPos.x, slotDef.towerPos.y, this.player, slotDef.tint, `slot${slot}`));
+            this.casterMinions.push(new CasterMinion(this, slotDef.towerPos.x, slotDef.towerPos.y, this.player, slotDef.tint, `slot${slot}`, id));
           });
         }
       });
@@ -193,78 +212,86 @@ export default class GameScene extends Phaser.Scene {
   }
 
   createPlayerHUD() {
-    const cx = ARENA_SIZE.width / 2;
-    const panelY = ARENA_SIZE.height - 28; // panel center, 28px from bottom
     const d = 30;
     const barMaxW = 185;
     const barH = 12;
     const boxSize = 42;
 
-    // Dark background panel
-    this.add.rectangle(cx, panelY, 530, 50, 0x000000, 0.82).setOrigin(0.5).setDepth(d);
-
-    // ── HP bar ──────────────────────────────────────────────────────────
-    const barLeft = cx - 230;
-    const hpY = panelY - 9;
-    const mpY = panelY + 9;
-
-    this.add.text(barLeft - 4, hpY, 'HP', { fontSize: '8px', color: '#86efac' })
-      .setOrigin(1, 0.5).setDepth(d + 1);
-    this.add.rectangle(barLeft + barMaxW / 2, hpY, barMaxW, barH, 0x1e293b)
-      .setOrigin(0.5).setDepth(d + 1);
-    this.hudHpFill = this.add.rectangle(barLeft, hpY, barMaxW, barH, 0x22c55e)
-      .setOrigin(0, 0.5).setDepth(d + 2);
-    this.hudHpText = this.add.text(barLeft + barMaxW / 2, hpY, '', { fontSize: '9px', color: '#fff' })
-      .setOrigin(0.5).setDepth(d + 3);
-
-    // ── MP bar ──────────────────────────────────────────────────────────
-    this.add.text(barLeft - 4, mpY, 'MP', { fontSize: '8px', color: '#93c5fd' })
-      .setOrigin(1, 0.5).setDepth(d + 1);
-    this.add.rectangle(barLeft + barMaxW / 2, mpY, barMaxW, barH, 0x1e293b)
-      .setOrigin(0.5).setDepth(d + 1);
-    this.hudMpFill = this.add.rectangle(barLeft, mpY, barMaxW, barH, 0x3b82f6)
-      .setOrigin(0, 0.5).setDepth(d + 2);
-    this.hudMpText = this.add.text(barLeft + barMaxW / 2, mpY, '', { fontSize: '9px', color: '#fff' })
-      .setOrigin(0.5).setDepth(d + 3);
-
-    // ── Divider ─────────────────────────────────────────────────────────
-    const divX = cx + 14;
-    this.add.rectangle(divX, panelY, 1, 38, 0xffffff, 0.12).setDepth(d + 1);
-
-    // ── ATK box (Space) ─────────────────────────────────────────────────
+    // All coords relative to container centre (0, 0)
+    const hpY = -9;
+    const mpY = 9;
+    const barLeft = -230;
+    const divX = 14;
     const qCx = divX + 14 + boxSize / 2;
-    this.add.rectangle(qCx, panelY, boxSize, boxSize, 0x334155).setOrigin(0.5).setDepth(d + 1);
-    // thin border
-    const qBorder = this.add.graphics().setDepth(d + 1);
-    qBorder.lineStyle(1, 0x64748b, 0.6);
-    qBorder.strokeRect(qCx - boxSize / 2, panelY - boxSize / 2, boxSize, boxSize);
-    // cooldown overlay — starts at top of box, origin (0,0)
-    this.hudQOverlay = this.add.rectangle(qCx - boxSize / 2, panelY - boxSize / 2, boxSize, 0, 0x000000, 0.78)
-      .setOrigin(0, 0).setDepth(d + 2);
-    // small key hint top-left
-    this.add.text(qCx - boxSize / 2 + 3, panelY - boxSize / 2 + 3, 'SPC', { fontSize: '7px', color: '#94a3b8' })
-      .setOrigin(0, 0).setDepth(d + 4);
-    // label shown when ready
-    this.hudQReadyLabel = this.add.text(qCx, panelY + 5, 'ATK', { fontSize: '10px', color: '#e2e8f0', fontStyle: 'bold' })
-      .setOrigin(0.5).setDepth(d + 4);
-    // timer shown when on cooldown
-    this.hudQTimer = this.add.text(qCx, panelY + 4, '', { fontSize: '12px', color: '#fff', fontStyle: 'bold' })
-      .setOrigin(0.5).setDepth(d + 4);
-
-    // ── ULT box (R) ─────────────────────────────────────────────────────
     const rCx = qCx + boxSize + 8;
-    this.add.rectangle(rCx, panelY, boxSize, boxSize, 0x3d1f0d).setOrigin(0.5).setDepth(d + 1);
-    const rBorder = this.add.graphics().setDepth(d + 1);
+
+    const items = [];
+
+    // Background panel
+    items.push(this.add.rectangle(0, 0, 530, 50, 0x000000, 0.82).setOrigin(0.5));
+
+    // HP bar
+    items.push(this.add.text(barLeft - 4, hpY, 'HP', { fontSize: '8px', color: '#86efac' }).setOrigin(1, 0.5));
+    items.push(this.add.rectangle(barLeft + barMaxW / 2, hpY, barMaxW, barH, 0x1e293b).setOrigin(0.5));
+    this.hudHpFill = this.add.rectangle(barLeft, hpY, barMaxW, barH, 0x22c55e).setOrigin(0, 0.5);
+    items.push(this.hudHpFill);
+    this.hudHpText = this.add.text(barLeft + barMaxW / 2, hpY, '', { fontSize: '9px', color: '#fff' }).setOrigin(0.5);
+    items.push(this.hudHpText);
+
+    // MP bar
+    items.push(this.add.text(barLeft - 4, mpY, 'MP', { fontSize: '8px', color: '#93c5fd' }).setOrigin(1, 0.5));
+    items.push(this.add.rectangle(barLeft + barMaxW / 2, mpY, barMaxW, barH, 0x1e293b).setOrigin(0.5));
+    this.hudMpFill = this.add.rectangle(barLeft, mpY, barMaxW, barH, 0x3b82f6).setOrigin(0, 0.5);
+    items.push(this.hudMpFill);
+    this.hudMpText = this.add.text(barLeft + barMaxW / 2, mpY, '', { fontSize: '9px', color: '#fff' }).setOrigin(0.5);
+    items.push(this.hudMpText);
+
+    // Divider
+    items.push(this.add.rectangle(divX, 0, 1, 38, 0xffffff, 0.12));
+
+    // ATK box
+    items.push(this.add.rectangle(qCx, 0, boxSize, boxSize, 0x334155).setOrigin(0.5));
+    const qBorder = this.add.graphics();
+    qBorder.lineStyle(1, 0x64748b, 0.6);
+    qBorder.strokeRect(qCx - boxSize / 2, -boxSize / 2, boxSize, boxSize);
+    items.push(qBorder);
+    this.hudQOverlay = this.add.rectangle(qCx - boxSize / 2, -boxSize / 2, boxSize, 0, 0x000000, 0.78).setOrigin(0, 0);
+    items.push(this.hudQOverlay);
+    items.push(this.add.text(qCx - boxSize / 2 + 3, -boxSize / 2 + 3, 'SPC', { fontSize: '7px', color: '#94a3b8' }).setOrigin(0, 0));
+    this.hudQReadyLabel = this.add.text(qCx, 5, 'ATK', { fontSize: '10px', color: '#e2e8f0', fontStyle: 'bold' }).setOrigin(0.5);
+    items.push(this.hudQReadyLabel);
+    this.hudQTimer = this.add.text(qCx, 4, '', { fontSize: '12px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
+    items.push(this.hudQTimer);
+
+    // ULT box
+    items.push(this.add.rectangle(rCx, 0, boxSize, boxSize, 0x3d1f0d).setOrigin(0.5));
+    const rBorder = this.add.graphics();
     rBorder.lineStyle(1, 0xc2410c, 0.6);
-    rBorder.strokeRect(rCx - boxSize / 2, panelY - boxSize / 2, boxSize, boxSize);
-    this.hudROverlay = this.add.rectangle(rCx - boxSize / 2, panelY - boxSize / 2, boxSize, 0, 0x000000, 0.78)
-      .setOrigin(0, 0).setDepth(d + 2);
-    this.add.text(rCx - boxSize / 2 + 3, panelY - boxSize / 2 + 3, 'R', { fontSize: '7px', color: '#fb923c' })
-      .setOrigin(0, 0).setDepth(d + 4);
-    this.hudRReadyLabel = this.add.text(rCx, panelY + 5, 'ULT', { fontSize: '10px', color: '#ff8c3a', fontStyle: 'bold' })
-      .setOrigin(0.5).setDepth(d + 4);
-    this.hudRTimer = this.add.text(rCx, panelY + 4, '', { fontSize: '12px', color: '#ff8c3a', fontStyle: 'bold' })
-      .setOrigin(0.5).setDepth(d + 4);
+    rBorder.strokeRect(rCx - boxSize / 2, -boxSize / 2, boxSize, boxSize);
+    items.push(rBorder);
+    this.hudROverlay = this.add.rectangle(rCx - boxSize / 2, -boxSize / 2, boxSize, 0, 0x000000, 0.78).setOrigin(0, 0);
+    items.push(this.hudROverlay);
+    items.push(this.add.text(rCx - boxSize / 2 + 3, -boxSize / 2 + 3, 'R', { fontSize: '7px', color: '#fb923c' }).setOrigin(0, 0));
+    this.hudRReadyLabel = this.add.text(rCx, 5, 'ULT', { fontSize: '10px', color: '#ff8c3a', fontStyle: 'bold' }).setOrigin(0.5);
+    items.push(this.hudRReadyLabel);
+    this.hudRTimer = this.add.text(rCx, 4, '', { fontSize: '12px', color: '#ff8c3a', fontStyle: 'bold' }).setOrigin(0.5);
+    items.push(this.hudRTimer);
+
+    // Target mode indicator (right side of panel)
+    const targetX = rCx + boxSize / 2 + 12;
+    items.push(this.add.text(targetX, -10, 'TARGET', { fontSize: '7px', color: '#94a3b8' }).setOrigin(0, 0.5));
+    this.hudTargetLabel = this.add.text(targetX, 4, '', { fontSize: '10px', color: '#fbbf24', fontStyle: 'bold' }).setOrigin(0, 0.5);
+    items.push(this.hudTargetLabel);
+    items.push(this.add.text(targetX, 16, '[1-4]', { fontSize: '7px', color: '#475569' }).setOrigin(0, 0.5));
+
+    this.hudContainer = this.add.container(this.scale.width / 2, this.scale.height - 28, items);
+    this.hudContainer.setDepth(d).setScrollFactor(0);
+
+    this.scale.on("resize", (gameSize) => {
+      if (this.hudContainer) {
+        this.hudContainer.setPosition(gameSize.width / 2, gameSize.height - 28);
+      }
+    });
   }
 
   updatePlayerHUD() {
@@ -297,9 +324,54 @@ export default class GameScene extends Phaser.Scene {
     this.hudRReadyLabel.setVisible(!rOnCd);
     this.hudRReadyLabel.setAlpha(rNoMana ? 0.4 : 1);
     this.hudRTimer.setText(rOnCd ? rCd.toFixed(1) : '');
+
+    // Target mode
+    const modeLabels = { 1: 'Champions', 2: 'Towers', 3: 'Creeps', 4: 'Closest' };
+    const modeColors = { 1: '#f87171', 2: '#60a5fa', 3: '#4ade80', 4: '#fbbf24' };
+    const mode = this.targetMode ?? 4;
+    this.hudTargetLabel.setText(modeLabels[mode] ?? 'Closest');
+    this.hudTargetLabel.setColor(modeColors[mode] ?? '#fbbf24');
   }
 
-  placeRocks() {
+  _buildRangeIndicators() {
+    const abilities = this.player.data.abilities;
+    const qRange = abilities?.q?.range ?? 0;
+    const rRange = abilities?.r?.range ?? 0;
+
+    this.qRangeIndicator = this.add.graphics().setDepth(3);
+    if (qRange > 0) {
+      this.qRangeIndicator.fillStyle(0xfbbf24, 0.06);
+      this.qRangeIndicator.fillCircle(0, 0, qRange);
+      this.qRangeIndicator.lineStyle(1, 0xfbbf24, 0.22);
+      this.qRangeIndicator.strokeCircle(0, 0, qRange);
+    }
+
+    this.rRangeIndicator = this.add.graphics().setDepth(3);
+    if (rRange > 0) {
+      this.rRangeIndicator.fillStyle(0xa855f7, 0.06);
+      this.rRangeIndicator.fillCircle(0, 0, rRange);
+      this.rRangeIndicator.lineStyle(1, 0xa855f7, 0.22);
+      this.rRangeIndicator.strokeCircle(0, 0, rRange);
+    }
+  }
+
+  _updateRangeIndicators() {
+    const alive = this.player.data.isAlive;
+    const x = this.player.sprite.x;
+    const y = this.player.sprite.y;
+    if (this.qRangeIndicator) {
+      this.qRangeIndicator.setPosition(x, y).setVisible(alive);
+    }
+    if (this.rRangeIndicator) {
+      this.rRangeIndicator.setPosition(x, y).setVisible(alive);
+    }
+  }
+
+  placeRocks(positions = null) {
+    if (positions) {
+      return positions.map(({ x, y }) => new Rock(this, x, y));
+    }
+
     const COUNT = 8;
     const MIN_DIST = 130;
     const MARGIN = 90;
@@ -344,10 +416,10 @@ export default class GameScene extends Phaser.Scene {
 
   spawnTwitches() {
     const corners = [
-      { x: 230, y: 120 },  // top-left circle
-      { x: 970, y: 120 },  // top-right circle
-      { x: 230, y: 660 },  // bottom-left circle
-      { x: 970, y: 660 },  // bottom-right circle
+      { x: 230, y: 120 },  // top-left
+      { x: 970, y: 120 },  // top-right
+      { x: 230, y: 660 },  // bottom-left
+      { x: 970, y: 660 },  // bottom-right
     ];
     const escortOffsets = [
       { dx: -45, dy: 30 },
@@ -495,6 +567,18 @@ export default class GameScene extends Phaser.Scene {
   update(_time, delta) {
     const velocity = this.calculateVelocity();
     this.player.move(velocity, delta / 1000, this.rocks);
+    // Keep undying rage aura glued to whoever has it active
+    for (const p of [this.player, ...(this.opponents ?? [])]) {
+      if (p?.undyingRageEffect) {
+        p.undyingRageEffect.setPosition(p.sprite.x, p.sprite.y);
+        p.undyingRageEffect.clear();
+        p.undyingRageEffect.lineStyle(3, 0xff2200, 0.7);
+        p.undyingRageEffect.strokeCircle(0, 0, 42);
+        p.undyingRageEffect.fillStyle(0xff0000, 0.12);
+        p.undyingRageEffect.fillCircle(0, 0, 42);
+      }
+    }
+    this._updateRangeIndicators();
     this.updatePlayerHUD();
     this.updateBars(this.player, this.playerBars);
     this.opponents.forEach((opp, i) => this.updateBars(opp, this.opponentBarsList[i]));
@@ -519,7 +603,7 @@ export default class GameScene extends Phaser.Scene {
       const hpBeforeAI = allPlayers.map(p => p.data.stats.health);
       this.creeps.forEach((creep) => creep.update(delta, allPlayers));
       this.twitches.forEach((t) => t.update(delta, allPlayers));
-      this.casterMinions.forEach((m) => m.update(delta));
+      this.casterMinions.forEach((m) => m.update(delta, allPlayers));
       // Send hit messages to any remote player that was damaged by AI this tick
       if (this.gameSync) {
         allPlayers.forEach((p, i) => {
@@ -546,7 +630,7 @@ export default class GameScene extends Phaser.Scene {
         const hpBefore = allPlayers.map(p => p.data.stats.health);
         const enemyMinions = this.casterMinions.filter(m => m.owner !== `slot${slot}`);
         const creepTargets = [...this.creeps, ...enemyMinions];
-        towerResult = tower.update(delta, creepTargets, enemyPlayers, allies);
+        towerResult = tower.update(delta, creepTargets, enemyPlayers, allies, this.twitches);
         fired = towerResult?.fired ?? false;
         if (fired && this.gameSync) {
           this.gameSync.send({ type: "tower-attack", tower: `slot${slot}`, roomId: this.roomId });
@@ -576,12 +660,20 @@ export default class GameScene extends Phaser.Scene {
 
     this.checkGameOver();
 
-    if (Phaser.Input.Keyboard.JustDown(this.ultimateKey)) {
+    const JustDown = Phaser.Input.Keyboard.JustDown;
+    if (JustDown(this.targetKey1)) { this.targetMode = 1; this.updatePlayerHUD(); }
+    if (JustDown(this.targetKey2)) { this.targetMode = 2; this.updatePlayerHUD(); }
+    if (JustDown(this.targetKey3)) { this.targetMode = 3; this.updatePlayerHUD(); }
+    if (JustDown(this.targetKey4)) { this.targetMode = 4; this.updatePlayerHUD(); }
+
+    if (JustDown(this.ultimateKey)) {
       this._tryFireUltimate();
     }
 
-    if (Phaser.Input.Keyboard.JustDown(this.attackKey)) {
-      const creepTarget = this.nearestCreepInRange("q");
+    if (JustDown(this.attackKey)) {
+      const creepTarget = this.targetMode !== 1 && this.targetMode !== 2
+        ? this.nearestCreepInRange("q")
+        : null;
       if (creepTarget) {
         const result = this.player.attackCreep(creepTarget, "q");
         if (result) {
@@ -619,14 +711,17 @@ export default class GameScene extends Phaser.Scene {
           }
         }
       } else {
-        // Attack nearest living opponent or attackable tower — whichever is closer
-        const nearestOpp = this._nearestLivingOpponent();
-        const towerTarget = this._nearestAttackableTower();
+        // Attack based on current targeting mode
+        const nearestOpp = this.targetMode !== 2 && this.targetMode !== 3 ? this._nearestLivingOpponent() : null;
+        const towerTarget = this.targetMode !== 1 && this.targetMode !== 3 ? this._nearestAttackableTower() : null;
 
         const oppDist = nearestOpp ? this.player.distanceTo(nearestOpp) : Infinity;
         const towerDist = towerTarget ? Math.hypot(towerTarget.tower.x - this.player.sprite.x, towerTarget.tower.y - this.player.sprite.y) : Infinity;
 
-        if (towerTarget && towerDist <= oppDist) {
+        // Mode 1: champions only — skip tower even if closer
+        // Mode 2: towers only — handled by towerTarget being set, nearestOpp null
+        // Mode 4: closest of champion/tower
+        if (towerTarget && (this.targetMode === 2 || towerDist <= oppDist)) {
           this._attackTower(towerTarget.tower, towerTarget.slot);
         } else if (nearestOpp) {
           const attackResult = this.player.attack(nearestOpp, "q");
@@ -700,8 +795,8 @@ export default class GameScene extends Phaser.Scene {
       const slot = Number(slotStr);
       if (slot === this.mySlot) continue;
       if (!tower.isAlive) continue;
-      // In 1v1 towers are only attackable when the owner is dead; FFA towers are always attackable
-      if (this.gameMode !== "ffa" && !this._isTowerOwnerDead(slot)) continue;
+      // Towers are only attackable when the owner is dead (both 1v1 and FFA)
+      if (!this._isTowerOwnerDead(slot)) continue;
       const dx = tower.x - this.player.sprite.x;
       const dy = tower.y - this.player.sprite.y;
       const dist = Math.hypot(dx, dy);
@@ -1035,6 +1130,10 @@ export default class GameScene extends Phaser.Scene {
 
   handleNetworkMessage(payload) {
     if (!payload) return;
+    if (payload.type === "rock-layout" && !this.isHost) {
+      this.rocks = this.placeRocks(payload.positions);
+      return;
+    }
     if (payload.type === "game-over" && !this.isHost) {
       if (this.gameOverFired) return;
       this.gameOverFired = true;
@@ -1069,7 +1168,7 @@ export default class GameScene extends Phaser.Scene {
     if (payload.type === "tower-hit" && this.isHost) {
       const { slot, damage } = payload;
       const tower = this.towersBySlot[slot];
-      const canAttack = this.gameMode === "ffa" || this._isTowerOwnerDead(slot);
+      const canAttack = this._isTowerOwnerDead(slot);
       if (tower?.isAlive && canAttack) {
         tower.takeDamage(damage);
       }
@@ -1139,6 +1238,20 @@ export default class GameScene extends Phaser.Scene {
       }
       // AoE to creeps/minions
       this._applyChampionAoE(primaryTarget, abilityDef, attackerEntry.slot);
+      return;
+    }
+
+    if (payload.type === "undying_rage") {
+      const { playerId, active } = payload;
+      // Find the player object this flag belongs to (could be local player or an opponent)
+      const playerObj = playerId === this.playerId
+        ? this.player
+        : this.opponents.find(o => o.data.id === playerId);
+      if (playerObj) {
+        playerObj.undyingActive = active;
+        if (active) this._startUndyingRageEffect(playerObj);
+        else this._stopUndyingRageEffect(playerObj);
+      }
       return;
     }
 
@@ -1257,8 +1370,30 @@ export default class GameScene extends Phaser.Scene {
     if (!this.player.canUseAbility("r")) return;
     const ability = this.player.data.abilities["r"];
 
-    // Ridder R: self speed burst — no target needed
-    if (ability.speedBoost) {
+    // Undying Rage (Berserker R): invulnerability buff — self-cast, no target needed
+    if (ability.undyingRage) {
+      this.player.useAbility("r");
+      this.player.undyingActive = true;
+      this._startUndyingRageEffect(this.player);
+      if (this.gameSync) {
+        this.gameSync.send({ type: "undying_rage", playerId: this.playerId, active: true, roomId: this.roomId });
+      }
+      const maxHp = this.player.data.stats.maxHealth ?? 700;
+      this.time.delayedCall(5000, () => {
+        this.player.undyingActive = false;
+        this._stopUndyingRageEffect(this.player);
+        if (this.player.data.stats.health < maxHp * 0.10) {
+          this.player.data.stats.health = Math.min(maxHp, this.player.data.stats.health + maxHp * 0.10);
+        }
+        if (this.gameSync) {
+          this.gameSync.send({ type: "undying_rage", playerId: this.playerId, active: false, roomId: this.roomId });
+        }
+      });
+      return;
+    }
+
+    // Speed boost only (no damage): self-cast and return
+    if (ability.speedBoost && !(ability.damage > 0)) {
       this.player.useAbility("r");
       this.player.speedBoostActive = true;
       this.player._flashAttackSprite();
@@ -1267,6 +1402,13 @@ export default class GameScene extends Phaser.Scene {
         this.player.speedBoostActive = false;
       });
       return;
+    }
+    // Speed boost + damage (Bellerophon): apply boost then fall through to hit target
+    if (ability.speedBoost && ability.damage > 0) {
+      this.player.speedBoostActive = true;
+      this.time.delayedCall((ability.speedBoostDuration ?? 3) * 1000, () => {
+        this.player.speedBoostActive = false;
+      });
     }
 
     const target = this._nearestLivingOpponent();
@@ -1362,6 +1504,61 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
+  _startUndyingRageEffect(player) {
+    // Dark red pulsing aura that follows the player
+    const gfx = this.add.graphics();
+    gfx.setDepth(10);
+    player.undyingRageEffect = gfx;
+    // Pulse tween: scale between 0.85 and 1.15
+    this.tweens.add({
+      targets: gfx,
+      scaleX: 1.2,
+      scaleY: 1.2,
+      duration: 400,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
+    });
+    // Initial burst flash
+    const burst = this.add.graphics();
+    burst.fillStyle(0xff2200, 0.5);
+    burst.fillCircle(0, 0, 55);
+    burst.setPosition(player.sprite.x, player.sprite.y);
+    burst.setDepth(10);
+    this.tweens.add({
+      targets: burst,
+      alpha: 0,
+      scaleX: 2.2,
+      scaleY: 2.2,
+      duration: 500,
+      ease: "Cubic.easeOut",
+      onComplete: () => burst.destroy()
+    });
+  }
+
+  _stopUndyingRageEffect(player) {
+    if (player.undyingRageEffect) {
+      this.tweens.killTweensOf(player.undyingRageEffect);
+      player.undyingRageEffect.destroy();
+      player.undyingRageEffect = null;
+    }
+    // Fade-out flash when buff ends
+    const endFlash = this.add.graphics();
+    endFlash.fillStyle(0xcc0000, 0.35);
+    endFlash.fillCircle(0, 0, 50);
+    endFlash.setPosition(player.sprite.x, player.sprite.y);
+    endFlash.setDepth(10);
+    this.tweens.add({
+      targets: endFlash,
+      alpha: 0,
+      scaleX: 1.6,
+      scaleY: 1.6,
+      duration: 400,
+      ease: "Cubic.easeOut",
+      onComplete: () => endFlash.destroy()
+    });
+  }
+
   _playExcaliburEffect(fromX, fromY, toX, toY, aoeRadius) {
     const angle = Math.atan2(toY - fromY, toX - fromX);
     const beamLen = Math.hypot(toX - fromX, toY - fromY) + aoeRadius * 0.6;
@@ -1390,9 +1587,10 @@ export default class GameScene extends Phaser.Scene {
 
     // --- origin flash (sword release point) ---
     const originFlash = this.add.graphics();
+    originFlash.setPosition(fromX, fromY);
     originFlash.setDepth(31);
     originFlash.fillStyle(0xfffacd, 1);
-    originFlash.fillCircle(fromX, fromY, 28);
+    originFlash.fillCircle(0, 0, 28);
     this.tweens.add({
       targets: originFlash,
       alpha: 0,
@@ -1405,11 +1603,12 @@ export default class GameScene extends Phaser.Scene {
 
     // --- impact explosion at target ---
     const blast = this.add.graphics();
+    blast.setPosition(toX, toY);
     blast.setDepth(31);
     blast.fillStyle(0xffd700, 0.9);
-    blast.fillCircle(toX, toY, aoeRadius * 0.5);
+    blast.fillCircle(0, 0, aoeRadius * 0.5);
     blast.fillStyle(0xffa500, 0.6);
-    blast.fillCircle(toX, toY, aoeRadius * 0.8);
+    blast.fillCircle(0, 0, aoeRadius * 0.8);
     this.tweens.add({
       targets: blast,
       alpha: 0,

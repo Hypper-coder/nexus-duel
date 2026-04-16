@@ -10,10 +10,11 @@ const STATS = {
 };
 
 export default class CasterMinion {
-  constructor(scene, x, y, target, tint, owner) {
+  constructor(scene, x, y, target, tint, owner, ownerId) {
     this.scene = scene;
     this.target = target;
-    this.owner = owner; // "local" | "remote"
+    this.owner = owner;
+    this.ownerId = ownerId ?? null;
     this.health = STATS.health;
     this.maxHealth = STATS.health;
     this.attackCooldown = 0;
@@ -27,16 +28,31 @@ export default class CasterMinion {
     this.healthBar = scene.add.rectangle(x, y - 28, 40, 4, tint).setOrigin(0.5).setDepth(20);
   }
 
-  update(delta) {
+  update(delta, allPlayers) {
     if (!this.isAlive) return;
 
     const sec = delta / 1000;
     if (this.attackCooldown > 0) this.attackCooldown -= sec;
 
-    if (!this.target?.data?.isAlive) return;
+    // In FFA (allPlayers provided), always chase the nearest enemy; in 1v1 fall back to locked target
+    let current = this.target;
+    if (allPlayers?.length > 1) {
+      let nearest = null;
+      let nearestDist = Infinity;
+      for (const p of allPlayers) {
+        if (!p?.data?.isAlive) continue;
+        // skip the player who owns this minion's tower
+        if (p.data.id && this.ownerId && p.data.id === this.ownerId) continue;
+        const dist = Math.hypot(p.sprite.x - this.sprite.x, p.sprite.y - this.sprite.y);
+        if (dist < nearestDist) { nearestDist = dist; nearest = p; }
+      }
+      if (nearest) current = nearest;
+    }
 
-    const dx = this.target.sprite.x - this.sprite.x;
-    const dy = this.target.sprite.y - this.sprite.y;
+    if (!current?.data?.isAlive) return;
+
+    const dx = current.sprite.x - this.sprite.x;
+    const dy = current.sprite.y - this.sprite.y;
     const dist = Math.hypot(dx, dy);
 
     if (dist > STATS.attackRange) {
@@ -45,8 +61,8 @@ export default class CasterMinion {
       this.sprite.y = Phaser.Math.Clamp(this.sprite.y + (dy / d) * STATS.speed * sec, ARENA_SIZE.padding, ARENA_SIZE.height - ARENA_SIZE.padding);
     } else if (this.attackCooldown <= 0) {
       this.attackCooldown = STATS.attackCooldown;
-      this.target.takeDamage(STATS.damage);
-      this._shootEffect();
+      current.takeDamage(STATS.damage);
+      this._shootEffect(current);
     }
 
     this.healthBar.x = this.sprite.x;
@@ -70,12 +86,12 @@ export default class CasterMinion {
     this.healthBar.displayWidth = 40 * Math.max(0, this.health / this.maxHealth);
   }
 
-  _shootEffect() {
+  _shootEffect(target) {
     const bolt = this.scene.add.graphics();
     bolt.lineStyle(2, 0x60a5fa, 1);
     bolt.beginPath();
     bolt.moveTo(this.sprite.x, this.sprite.y);
-    bolt.lineTo(this.target.sprite.x, this.target.sprite.y);
+    bolt.lineTo(target.sprite.x, target.sprite.y);
     bolt.strokePath();
     bolt.setDepth(25);
     this.scene.tweens.add({
