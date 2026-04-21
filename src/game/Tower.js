@@ -12,6 +12,7 @@ export default class Tower {
     this.y = y;
     this.tint = tint;
     this.attackCooldown = 0;
+    this.attackRange = ATTACK_RANGE;
 
     if (scene.textures.exists("grail")) {
       this.sprite = scene.add

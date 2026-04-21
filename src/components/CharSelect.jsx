@@ -26,13 +26,15 @@ export default function CharSelect({
   roomId,
   champSelections = {},
   champReadyPeers = [],
-  localChampReady = false
+  localChampReady = false,
+  isSolo = false
 }) {
-  const allPlayers = [playerId, ...connectedPeers];
-  const allConfirmed =
-    localChampReady &&
-    connectedPeers.length > 0 &&
-    connectedPeers.every((id) => champReadyPeers.includes(id));
+  const allPlayers = isSolo ? [playerId] : [playerId, ...connectedPeers];
+  const allConfirmed = isSolo
+    ? localChampReady
+    : localChampReady &&
+      connectedPeers.length > 0 &&
+      connectedPeers.every((id) => champReadyPeers.includes(id));
 
   const lockedByOther = new Set(
     connectedPeers
@@ -89,7 +91,7 @@ export default function CharSelect({
             Lock In
           </button>
         ) : allConfirmed ? (
-          <p style={{ opacity: 0.8, margin: 0 }}>All players locked in — starting…</p>
+          <p style={{ opacity: 0.8, margin: 0 }}>{isSolo ? "Starting…" : "All players locked in — starting…"}</p>
         ) : (
           <p style={{ opacity: 0.5, margin: 0 }}>Waiting for other players…</p>
         )}
@@ -144,10 +146,14 @@ export default function CharSelect({
                   <strong>R — {champion.abilities.r.name}</strong>
                   <span>
                     {champion.abilities.r.undyingRage ? "5s invulnerability · heals at low HP" : ""}
-                    {!champion.abilities.r.undyingRage && champion.abilities.r.damage > 0 ? `${champion.abilities.r.damage} dmg` : ""}
+                    {champion.abilities.r.blind ? "5s cloak · +20% speed" : ""}
+                    {!champion.abilities.r.undyingRage && !champion.abilities.r.blind && champion.abilities.r.damage > 0 ? `${champion.abilities.r.damage} dmg` : ""}
                     {champion.abilities.r.aoeRadius ? " · AoE" : ""}
                     {champion.abilities.r.trueDamage ? " · True dmg" : ""}
-                    {champion.abilities.r.speedBoost ? ` · Speed ×${champion.abilities.r.speedBoost}` : ""}
+                    {champion.abilities.r.armorBroken ? " · Armor Broken 5s" : ""}
+                    {champion.abilities.r.slow ? " · Slows 3s" : ""}
+                    {champion.abilities.r.speedBoost && !champion.abilities.r.blind ? ` · AoE slow 30% · +20% speed/hit` : ""}
+                    {champion.abilities.r.speedBoost && champion.abilities.r.blind ? ` · Speed ×${champion.abilities.r.speedBoost}` : ""}
                   </span>
                 </div>
 

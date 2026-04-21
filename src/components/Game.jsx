@@ -3,6 +3,7 @@ import Phaser from "phaser";
 import GameScene from "../game/GameScene";
 import GameSync from "../network/GameSync";
 import { ARENA_SIZE, PLAYER_SLOTS } from "../utils/constants";
+import { installWorkerTimer } from "../game/workerTimer";
 
 export default function Game({ champion, roomId, playerId, signalingStatus, isHost, wsSend, onRegisterGameHandler, score, onScoreUpdate, onReturnToLobby, onRematch, gameMode, mySlot, slotAssignments, champSelections }) {
   const containerRef = useRef(null);
@@ -64,7 +65,7 @@ export default function Game({ champion, roomId, playerId, signalingStatus, isHo
           remoteSpawn,
           gameMode: gameMode ?? "1v1",
           mySlot: slot,
-          opponentSlots: opponentSlots.length > 0 ? opponentSlots : [{ id: "peer_remote", slot: remoteSlot }],
+          opponentSlots: gameMode === "testing" ? [] : (opponentSlots.length > 0 ? opponentSlots : [{ id: "peer_remote", slot: remoteSlot }]),
           onGameOver: (result) => setGameOver(result),
           onScoreUpdate
         })
@@ -82,6 +83,11 @@ export default function Game({ champion, roomId, playerId, signalingStatus, isHo
       }
     };
 
+    // Route Phaser's setTimeout calls through a Web Worker so the game loop
+    // runs at full speed even when this browser tab is hidden/backgrounded.
+    // (Chrome throttles plain setTimeout to ~1 fps in hidden tabs; Worker
+    // timers are not subject to that throttle.)
+    const uninstallWorkerTimer = installWorkerTimer();
     const game = new Phaser.Game(config);
 
     // Prevent Phaser from pausing when the window loses focus (alt+tab, etc.)
@@ -90,6 +96,7 @@ export default function Game({ champion, roomId, playerId, signalingStatus, isHo
 
     return () => {
       game.destroy(true);
+      uninstallWorkerTimer();
       gameSync.dispose();
     };
   }, [champion, containerRef, playerId, roomId, gameSync, isHost]);

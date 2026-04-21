@@ -19,6 +19,11 @@ export default class Player {
 
     this.attackCooldown = 0;
     this.undyingActive = false;
+    this.slowActive = false;
+    this.slowMult = 0.8;
+    this.riderSpeedBonus = 0;
+    this.armorBrokenActive = false;
+    this.poisonActive = false;
   }
 
   move(velocity, delta, rocks = []) {
@@ -52,12 +57,13 @@ export default class Player {
     this.data.position.y = y;
   }
 
-  takeDamage(amount, trueDamage = false) {
+  takeDamage(amount, trueDamage = false, fromChampion = false, bypassBlind = false) {
     if (!this.data.isAlive) return;
-    const armor = trueDamage ? 0 : (this.data.stats.armor ?? 0);
+    if (this.blindActive && fromChampion && !bypassBlind) return;
+    const armor = (trueDamage || this.armorBrokenActive) ? 0 : (this.data.stats.armor ?? 0);
     const effective = Math.round(amount * (100 / (100 + armor)));
     if (this.undyingActive) {
-      const minHp = Math.ceil((this.data.stats.maxHealth ?? 700) * 0.03);
+      const minHp = 1;
       this.data.stats.health = Math.max(minHp, this.data.stats.health - effective);
       return;
     }
@@ -87,7 +93,7 @@ export default class Player {
     if (mana < maxMana) {
       this.data.stats.mana = Math.min(maxMana, mana + manaRegen * delta);
     }
-    if (health < maxHealth && healthRegen) {
+    if (health < maxHealth && healthRegen && !this.poisonActive) {
       this.data.stats.health = Math.min(maxHealth, health + healthRegen * delta);
     }
   }
@@ -132,7 +138,7 @@ export default class Player {
 
     this.useAbility(abilityKey);
     const damage = Math.round((ability.damage ?? 30) * this._damageMultiplier());
-    target.takeDamage(damage);
+    target.takeDamage(damage, false, true);
     this._flashAttackSprite();
     return {
       damage,
@@ -164,19 +170,24 @@ export default class Player {
   }
 
   getMovementSpeedMultiplier() {
-    if (this.speedBoostActive) return this.data.abilities?.r?.speedBoost ?? 2.0;
-    if (this.data.championKey !== "warrior") return 1;
-    const ratio = this._healthRatio();
-    if (ratio <= 0.25) return 1.3;
-    if (ratio <= 0.5) return 1.2;
-    return 1;
+    if (this.speedBoostActive) {
+      if (this.riderSpeedBonus > 0) return 1.5 + this.riderSpeedBonus;
+      return this.data.abilities?.r?.speedBoost ?? 2.0;
+    }
+    let mult = 1;
+    if (this.data.championKey === "warrior") {
+      const ratio = this._healthRatio();
+      if (ratio <= 0.25) mult = 1.15;
+    }
+    if (this.slowActive) mult *= (this.slowMult ?? 0.8);
+    return mult;
   }
 
   _damageMultiplier() {
     if (this.data.championKey !== "warrior") return 1;
     const ratio = this._healthRatio();
-    if (ratio <= 0.25) return 1.4;
-    if (ratio <= 0.5) return 1.25;
+    if (ratio <= 0.25) return 1.25;
+    if (ratio <= 0.5) return 1.1;
     return 1;
   }
 

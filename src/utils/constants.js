@@ -37,7 +37,7 @@ export const CHAMPIONS = {
     },
     abilities: {
       q: { name: "Berserk Strike", damage: 90, cooldown: 1.2, range: 130, manaCost: 15 },
-      r: { name: "Undying Rage", cooldown: 55, manaCost: 100, undyingRage: true }
+      r: { name: "Undying Rage", cooldown: 55, manaCost: 50, undyingRage: true }
     }
   },
   archer: {
@@ -55,7 +55,7 @@ export const CHAMPIONS = {
     },
     abilities: {
       q: { name: "Arrow Shot", damage: 58, cooldown: 1.0, range: 290, manaCost: 18 },
-      r: { name: "Unlimited Blade Works", damage: 175, cooldown: 50, range: 310, aoeRadius: 260, manaCost: 200 }
+      r: { name: "Blind", cooldown: 50, manaCost: 100, blind: true, speedBoost: 1.2, speedBoostDuration: 5 }
     }
   },
   saber: {
@@ -73,7 +73,7 @@ export const CHAMPIONS = {
     },
     abilities: {
       q: { name: "Blade Strike", damage: 78, cooldown: 1.0, range: 165, manaCost: 25 },
-      r: { name: "Excalibur", damage: 230, cooldown: 45, range: 350, aoeRadius: 185, manaCost: 190 }
+      r: { name: "Excalibur", damage: 230, cooldown: 45, range: 350, manaCost: 95 }
     }
   },
   assassin: {
@@ -91,7 +91,7 @@ export const CHAMPIONS = {
     },
     abilities: {
       q: { name: "Shadow Strike", damage: 58, cooldown: 1.0, range: 130, manaCost: 22 },
-      r: { name: "Zabaniya", damage: 160, cooldown: 35, range: 160, manaCost: 130, trueDamage: true }
+      r: { name: "Zabaniya", damage: 100, cooldown: 35, range: 160, manaCost: 65, trueDamage: true, poison: true, poisonDamage: 75, poisonDuration: 5 }
     }
   },
   ridder: {
@@ -108,8 +108,8 @@ export const CHAMPIONS = {
       healthRegen: 4
     },
     abilities: {
-      q: { name: "Nail", damage: 52, cooldown: 0.9, range: 115, manaCost: 18 },
-      r: { name: "Bellerophon", damage: 0, cooldown: 30, range: 0, manaCost: 160, speedBoost: 2.5, speedBoostDuration: 2.5 }
+      q: { name: "Nail", damage: 52, cooldown: 0.9, range: 150, manaCost: 18 },
+      r: { name: "Chain Jail", damage: 100, cooldown: 30, range: 0, manaCost: 80, speedBoost: 1.5, speedBoostDuration: 5, aoeRadius: 300 }
     }
   },
   lancer: {
@@ -127,7 +127,7 @@ export const CHAMPIONS = {
     },
     abilities: {
       q: { name: "Lance Thrust", damage: 65, cooldown: 1.0, range: 225, manaCost: 20 },
-      r: { name: "Gae Bolg", damage: 185, cooldown: 35, range: 260, manaCost: 130, trueDamage: true }
+      r: { name: "Gae Bolg", damage: 140, cooldown: 35, range: 260, manaCost: 65, trueDamage: true, armorBroken: true }
     }
   },
   mage: {
@@ -144,8 +144,8 @@ export const CHAMPIONS = {
       healthRegen: 3
     },
     abilities: {
-      q: { name: "Fireball", damage: 72, cooldown: 1.5, range: 280, manaCost: 55, aoeRadius: 110 },
-      r: { name: "Rule Breaker", damage: 155, cooldown: 45, range: 300, manaCost: 250, trueDamage: true }
+      q: { name: "Fireball", damage: 72, cooldown: 1.5, range: 280, manaCost: 55, aoeRadius: 110, aoeDamage: 25 },
+      r: { name: "Rule Breaker", damage: 120, cooldown: 45, range: 300, manaCost: 125, slow: true, slowDuration: 3 }
     }
   }
 };

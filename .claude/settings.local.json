@@ -3,7 +3,8 @@
     "allow": [
       "Bash(sed -n '99,103p' c:/Users/blaz/repos/nexus-duel/src/game/GameScene.js)",
       "Bash(sed -n '145,149p' c:/Users/blaz/repos/nexus-duel/src/game/GameScene.js)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(npx vite *)"
     ]
   }
 }

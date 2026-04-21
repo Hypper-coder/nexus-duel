@@ -108,6 +108,22 @@ export default function App() {
     sendSignalRef.current?.({ type: "champ-ready", peerId: playerId, champKey: champion });
   };
 
+  const handleStartTesting = () => {
+    setGameMode("testing");
+    gameModeRef.current = "testing";
+    setIsHost(true);
+    isHostRef.current = true;
+    setMySlot(0);
+    setSlotAssignments({});
+    slotAssignmentsRef.current = {};
+    setLocalReady(false);
+    setReadyPeers([]);
+    setLocalChampReady(false);
+    setChampReadyPeers([]);
+    setChampSelections({});
+    setView(VIEWS.CHAMP_SELECT);
+  };
+
   const handleReturnToLobby = () => {
     setLocalReady(false);
     setReadyPeers([]);
@@ -272,11 +288,19 @@ export default function App() {
   // Auto-advance to game once every connected peer has confirmed their champion
   useEffect(() => {
     if (view !== VIEWS.CHAMP_SELECT) return;
+    if (gameMode === "testing") return; // handled by the solo effect below
     if (!localChampReady || connectedPeers.length < requiredPeers) return;
     if (connectedPeers.every((id) => champReadyPeers.includes(id))) {
       setView(VIEWS.GAME);
     }
-  }, [localChampReady, champReadyPeers, connectedPeers, view, requiredPeers]);
+  }, [localChampReady, champReadyPeers, connectedPeers, view, requiredPeers, gameMode]);
+
+  // Testing / solo mode: advance to game as soon as local player locks in
+  useEffect(() => {
+    if (view !== VIEWS.CHAMP_SELECT) return;
+    if (gameMode !== "testing") return;
+    if (localChampReady) setView(VIEWS.GAME);
+  }, [localChampReady, view, gameMode]);
 
   // Rematch: all players agreed → go back to champ select and reset round state
   useEffect(() => {
@@ -305,6 +329,7 @@ export default function App() {
         <Lobby
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}
+          onStartTesting={handleStartTesting}
           statusLabel={lobbyStatus}
           connectedPeers={connectedPeers}
           roomId={roomId}
@@ -335,6 +360,7 @@ export default function App() {
           champSelections={champSelections}
           champReadyPeers={champReadyPeers}
           localChampReady={localChampReady}
+          isSolo={gameMode === "testing"}
         />
       )}
 

@@ -28,7 +28,12 @@ export function buildChampionState(key, playerId, position) {
         aoeRadius: ability.aoeRadius ?? 0,
         name: ability.name,
         ...(ability.speedBoost !== undefined && { speedBoost: ability.speedBoost, speedBoostDuration: ability.speedBoostDuration ?? 3 }),
-        ...(ability.trueDamage !== undefined && { trueDamage: ability.trueDamage })
+        ...(ability.trueDamage !== undefined && { trueDamage: ability.trueDamage }),
+        ...(ability.undyingRage !== undefined && { undyingRage: ability.undyingRage }),
+        ...(ability.blind !== undefined && { blind: ability.blind }),
+        ...(ability.slow !== undefined && { slow: ability.slow, slowDuration: ability.slowDuration ?? 3 }),
+        ...(ability.armorBroken !== undefined && { armorBroken: ability.armorBroken }),
+        ...(ability.poison !== undefined && { poison: ability.poison, poisonDamage: ability.poisonDamage ?? 75, poisonDuration: ability.poisonDuration ?? 5 })
       };
       return acc;
     }, {}),
